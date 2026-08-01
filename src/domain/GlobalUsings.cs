@@ -1,0 +1,1 @@
+global using static EventReservation.Domain.Results.ResultFactory;

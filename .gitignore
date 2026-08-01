@@ -491,3 +491,5 @@ appsettings.Local.json
 
 # Rider/VS local overrides
 *.user
+
+.vscode/
