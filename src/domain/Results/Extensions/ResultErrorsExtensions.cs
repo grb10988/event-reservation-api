@@ -1,0 +1,47 @@
+using System.Diagnostics.CodeAnalysis;
+
+namespace EventReservation.Domain.Results.Extensions;
+
+public static class ResultErrorExtensions
+{
+    // ============================================================
+    // Group 1: Accumulation
+    // ============================================================
+
+    public static void AddError(this ResultErrors errors, ResultError error) => errors.Add(error);
+
+    public static void AddError(this ResultErrors errors, IEnumerable<ResultError> newErrors)
+    {
+        if (newErrors is not null)
+            errors.AddRange(newErrors);
+    }
+
+    // ============================================================
+    // Group 2: Condition checks
+    // ============================================================
+
+    public static bool Require(this ResultErrors errors, bool condition, ResultError error)
+    {
+        if (condition)
+            return true;
+
+        errors.AddError(error);
+        return false;
+    }
+
+    public static bool Require<T>(this ResultErrors errors, [NotNullWhen(true)] T? value, ResultError error)
+       where T : class
+    {
+        if (value is not null)
+            return true;
+
+        errors.AddError(error);
+        return false;
+    }
+
+    // ============================================================
+    // Group 3: Conversion
+    // ============================================================
+
+    public static Result<T> ToFailureResult<T>(this ResultErrors errors) => Failure<T>(errors.Errors);
+}

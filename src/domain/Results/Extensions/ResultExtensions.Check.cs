@@ -3,10 +3,10 @@ namespace EventReservation.Domain.Results.Extensions;
 public static partial class ResultExtensions
 {
     // ============================================================
-    // Group 1: Result -> Result, check func returns Result
+    // Group 1: Result -> Result, check func returns Result<TOther> (discarded)
     // ============================================================
 
-    public static Result Ensure(this Result result, Func<Result> func)
+    public static Result Check<TOther>(this Result result, Func<Result<TOther>> func)
     {
         if (result.IsFailure)
             return result;
@@ -18,7 +18,7 @@ public static partial class ResultExtensions
             : Failure(checkResult.Errors);
     }
 
-    public static async Task<Result> Ensure(this Result result, Func<Task<Result>> func)
+    public static async Task<Result> Check<TOther>(this Result result, Func<Task<Result<TOther>>> func)
     {
         if (result.IsFailure)
             return result;
@@ -30,13 +30,13 @@ public static partial class ResultExtensions
             : Failure(checkResult.Errors);
     }
 
-    public static async Task<Result> Ensure(this Task<Result> resultTask, Func<Result> func)
+    public static async Task<Result> Check<TOther>(this Task<Result> resultTask, Func<Result<TOther>> func)
     {
         var result = await resultTask;
-        return result.Ensure(func);
+        return result.Check(func);
     }
 
-    public static async Task<Result> Ensure(this Task<Result> resultTask, Func<Task<Result>> func)
+    public static async Task<Result> Check<TOther>(this Task<Result> resultTask, Func<Task<Result<TOther>>> func)
     {
         var result = await resultTask;
 
@@ -51,10 +51,10 @@ public static partial class ResultExtensions
     }
 
     // ============================================================
-    // Group 2: Result<T> -> Result<T>, check func returns Result
+    // Group 2: Result<T> -> Result<T>, check func returns Result<TOther> (discarded)
     // ============================================================
 
-    public static Result<T> Ensure<T>(this Result<T> result, Func<T, Result> func)
+    public static Result<T> Check<T, TOther>(this Result<T> result, Func<T, Result<TOther>> func)
     {
         if (result.IsFailure)
             return Failure<T>(result.Errors);
@@ -66,7 +66,7 @@ public static partial class ResultExtensions
             : Failure<T>(checkResult.Errors);
     }
 
-    public static async Task<Result<T>> Ensure<T>(this Result<T> result, Func<T, Task<Result>> func)
+    public static async Task<Result<T>> Check<T, TOther>(this Result<T> result, Func<T, Task<Result<TOther>>> func)
     {
         if (result.IsFailure)
             return Failure<T>(result.Errors);
@@ -78,13 +78,13 @@ public static partial class ResultExtensions
             : Failure<T>(checkResult.Errors);
     }
 
-    public static async Task<Result<T>> Ensure<T>(this Task<Result<T>> resultTask, Func<T, Result> func)
+    public static async Task<Result<T>> Check<T, TOther>(this Task<Result<T>> resultTask, Func<T, Result<TOther>> func)
     {
         var result = await resultTask;
-        return result.Ensure(func);
+        return result.Check(func);
     }
 
-    public static async Task<Result<T>> Ensure<T>(this Task<Result<T>> resultTask, Func<T, Task<Result>> func)
+    public static async Task<Result<T>> Check<T, TOther>(this Task<Result<T>> resultTask, Func<T, Task<Result<TOther>>> func)
     {
         var result = await resultTask;
 
