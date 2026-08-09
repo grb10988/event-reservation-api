@@ -12,43 +12,50 @@ public enum EventStatus
 public sealed class Event
 {
     public Guid Id { get; }
+    public Guid VenueId { get; }
     public string Name { get; }
-    public string Venue { get; }
     public string Description { get; }
     public DateTimeOffset StartTime { get; }
     public DateTimeOffset EndTime { get; }
-    public int Capacity { get; }
+    public decimal TicketPrice { get; }
     public EventStatus Status { get; private set; }
 
     private Event(
         Guid id,
+        Guid venueId,
         string name,
-        string venue,
         string description,
         DateTimeOffset startTime,
         DateTimeOffset endTime,
-        int capacity,
+        decimal ticketPrice,
         EventStatus status)
     {
         Id = id;
+        VenueId = venueId;
         Name = name;
-        Venue = venue;
         Description = description;
         StartTime = startTime;
         EndTime = endTime;
-        Capacity = capacity;
+        TicketPrice = ticketPrice;
         Status = status;
     }
 
     public static Result<Event> Create(
+        Guid venueId,
         string name,
-        string venue,
         string description,
         DateTimeOffset startTime,
         DateTimeOffset endTime,
-        int capacity,
+        decimal ticketPrice,
         TimeProvider timeProvider)
-        => new Factory(name, venue, description, startTime, endTime, capacity, timeProvider).Create();
+        => new Factory(
+            venueId,
+            name,
+            description,
+            startTime,
+            endTime,
+            ticketPrice,
+            timeProvider).Create();
 
     public Result<Event> Publish()
     {
@@ -70,51 +77,51 @@ public sealed class Event
 
     private sealed class Factory : ResultConstructor<Event>
     {
+        private readonly Guid _venueId;
         private readonly string _name;
-        private readonly string _venue;
         private readonly string _description;
         private readonly DateTimeOffset _startTime;
         private readonly DateTimeOffset _endTime;
-        private readonly int _capacity;
+        private readonly decimal _ticketPrice;
         private readonly TimeProvider _timeProvider;
 
         internal Factory(
+            Guid venueId,
             string name,
-            string venue,
             string description,
             DateTimeOffset startTime,
             DateTimeOffset endTime,
-            int capacity,
+            decimal ticketPrice,
             TimeProvider timeProvider)
         {
+            _venueId = venueId;
             _name = name;
-            _venue = venue;
             _description = description;
             _startTime = startTime;
             _endTime = endTime;
-            _capacity = capacity;
+            _ticketPrice = ticketPrice;
             _timeProvider = timeProvider;
         }
 
         internal Result<Event> Create() => ExecuteSafely(() =>
         {
+            Require(_venueId != Guid.Empty, Errors.EmptyVenueId);
             Require(!string.IsNullOrWhiteSpace(_name), Errors.EmptyName);
-            Require(!string.IsNullOrWhiteSpace(_venue), Errors.EmptyVenue);
             Require(!string.IsNullOrWhiteSpace(_description), Errors.EmptyDescription);
             Require(_startTime > _timeProvider.GetUtcNow(), Errors.InvalidStartTime);
             Require(_endTime > _startTime, Errors.InvalidEndTime);
-            Require(_capacity > 0, Errors.InvalidCapacity);
+            Require(_ticketPrice >= 0, Errors.InvalidTicketPrice);
 
             return HasErrors
                 ? ToFailureResult()
                 : Success(new Event(
                     Guid.CreateVersion7(),
+                    _venueId,
                     _name,
-                    _venue,
                     _description,
                     _startTime,
                     _endTime,
-                    _capacity,
+                    _ticketPrice,
                     EventStatus.Draft));
         });
     }
@@ -122,12 +129,12 @@ public sealed class Event
     public static class Errors
     {
         private const string Context = "EVENT";
+        public static ResultError EmptyVenueId => new(Context, "Venue is required");
         public static ResultError EmptyName => new(Context, "Name is required.");
-        public static ResultError EmptyVenue => new(Context, "Venue is required");
         public static ResultError EmptyDescription => new(Context, "Description is required.");
         public static ResultError InvalidStartTime => new(Context, "StartTime must be in the future.");
         public static ResultError InvalidEndTime => new(Context, "EndTime must be after StartTime.");
-        public static ResultError InvalidCapacity => new(Context, "Capacity must be greater than zero.");
+        public static ResultError InvalidTicketPrice => new(Context, "TicketPrice cannot be negative.");
         public static ResultError CannotPublish => new(Context, "Only a Draft event can be published.");
         public static ResultError CannotCancel => new(Context, "A Cancelled event cannot be cancelled again.");
     }

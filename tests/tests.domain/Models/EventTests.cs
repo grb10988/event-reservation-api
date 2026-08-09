@@ -6,10 +6,10 @@ namespace EventReservation.Tests.Domain.Models;
 [TestClass]
 public class EventTests
 {
+    private static readonly Guid ValidVenueId = Guid.NewGuid();
     private const string ValidName = "Summer Concert";
-    private const string ValidVenue = "City Amphitheater";
     private const string ValidDescription = "An outdoor summer concert series.";
-    private const int ValidCapacity = 500;
+    private const decimal ValidTicketPrice = 50.00m;
 
     private static readonly DateTimeOffset Now = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
     private static readonly DateTimeOffset ValidStartTime = Now.AddDays(30);
@@ -31,56 +31,53 @@ public class EventTests
     public void Create_WithValidInputs_ReturnsSuccessWithExpectedValues()
     {
         // Act
-        var result = Event.Create(ValidName, ValidVenue, ValidDescription, ValidStartTime, ValidEndTime, ValidCapacity, _timeProvider);
+        var result = Event.Create(ValidVenueId, ValidName, ValidDescription, ValidStartTime, ValidEndTime, ValidTicketPrice, _timeProvider);
 
         // Assert
         Assert.IsTrue(result.IsSuccess);
         Assert.AreEqual(ValidName, result.Value.Name);
-        Assert.AreEqual(ValidVenue, result.Value.Venue);
+        Assert.AreEqual(ValidVenueId, result.Value.VenueId);
         Assert.AreEqual(ValidDescription, result.Value.Description);
         Assert.AreEqual(ValidStartTime, result.Value.StartTime);
         Assert.AreEqual(ValidEndTime, result.Value.EndTime);
-        Assert.AreEqual(ValidCapacity, result.Value.Capacity);
+        Assert.AreEqual(ValidTicketPrice, result.Value.TicketPrice);
         Assert.AreEqual(EventStatus.Draft, result.Value.Status);
         Assert.AreNotEqual(Guid.Empty, result.Value.Id);
     }
 
-    [DataTestMethod]
+    [TestMethod]
     [DataRow(null)]
     [DataRow("")]
     [DataRow("   ")]
     public void Create_WithInvalidName_ReturnsFailureWithEmptyNameError(string? name)
     {
         // Act
-        var result = Event.Create(name!, ValidVenue, ValidDescription, ValidStartTime, ValidEndTime, ValidCapacity, _timeProvider);
+        var result = Event.Create(ValidVenueId, name!, ValidDescription, ValidStartTime, ValidEndTime, ValidTicketPrice, _timeProvider);
 
         // Assert
         Assert.IsTrue(result.IsFailure);
         CollectionAssert.Contains(result.Errors.ToList(), Event.Errors.EmptyName);
     }
 
-    [DataTestMethod]
-    [DataRow(null)]
-    [DataRow("")]
-    [DataRow("   ")]
-    public void Create_WithInvalidVenue_ReturnsFailureWithEmptyVenueError(string? venue)
+    [TestMethod]
+    public void Create_WithInvalidVenueId_ReturnsFailureWithEmptyVenueIdError()
     {
         // Act
-        var result = Event.Create(ValidName, venue!, ValidDescription, ValidStartTime, ValidEndTime, ValidCapacity, _timeProvider);
+        var result = Event.Create(Guid.Empty, ValidName, ValidDescription, ValidStartTime, ValidEndTime, ValidTicketPrice, _timeProvider);
 
         // Assert
         Assert.IsTrue(result.IsFailure);
-        CollectionAssert.Contains(result.Errors.ToList(), Event.Errors.EmptyVenue);
+        CollectionAssert.Contains(result.Errors.ToList(), Event.Errors.EmptyVenueId);
     }
 
-    [DataTestMethod]
+    [TestMethod]
     [DataRow(null)]
     [DataRow("")]
     [DataRow("   ")]
     public void Create_WithInvalidDescription_ReturnsFailureWithEmptyDescriptionError(string? description)
     {
         // Act
-        var result = Event.Create(ValidName, ValidVenue, description!, ValidStartTime, ValidEndTime, ValidCapacity, _timeProvider);
+        var result = Event.Create(ValidVenueId, ValidName, description!, ValidStartTime, ValidEndTime, ValidTicketPrice, _timeProvider);
 
         // Assert
         Assert.IsTrue(result.IsFailure);
@@ -94,7 +91,7 @@ public class EventTests
         var pastStartTime = Now.AddDays(-1);
 
         // Act
-        var result = Event.Create(ValidName, ValidVenue, ValidDescription, pastStartTime, ValidEndTime, ValidCapacity, _timeProvider);
+        var result = Event.Create(ValidVenueId, ValidName, ValidDescription, pastStartTime, ValidEndTime, ValidTicketPrice, _timeProvider);
 
         // Assert
         Assert.IsTrue(result.IsFailure);
@@ -108,31 +105,42 @@ public class EventTests
         var endBeforeStart = ValidStartTime.AddHours(-1);
 
         // Act
-        var result = Event.Create(ValidName, ValidVenue, ValidDescription, ValidStartTime, endBeforeStart, ValidCapacity, _timeProvider);
+        var result = Event.Create(ValidVenueId, ValidName, ValidDescription, ValidStartTime, endBeforeStart, ValidTicketPrice, _timeProvider);
 
         // Assert
         Assert.IsTrue(result.IsFailure);
         CollectionAssert.Contains(result.Errors.ToList(), Event.Errors.InvalidEndTime);
     }
 
-    [DataTestMethod]
-    [DataRow(0)]
+    [TestMethod]
     [DataRow(-1)]
-    public void Create_WithInvalidCapacity_ReturnsFailureWithInvalidCapacityError(int capacity)
+    [DataRow(-100)]
+    public void Create_WithNegativeTicketPrice_ReturnsFailureWithInvalidTicketPriceError(int ticketPrice)
     {
         // Act
-        var result = Event.Create(ValidName, ValidVenue, ValidDescription, ValidStartTime, ValidEndTime, capacity, _timeProvider);
+        var result = Event.Create(ValidVenueId, ValidName, ValidDescription, ValidStartTime, ValidEndTime, ticketPrice, _timeProvider);
 
         // Assert
         Assert.IsTrue(result.IsFailure);
-        CollectionAssert.Contains(result.Errors.ToList(), Event.Errors.InvalidCapacity);
+        CollectionAssert.Contains(result.Errors.ToList(), Event.Errors.InvalidTicketPrice);
+    }
+
+    [TestMethod]
+    public void Create_WithZeroTicketPrice_ReturnsSuccess()
+    {
+        // Act
+        var result = Event.Create(ValidVenueId, ValidName, ValidDescription, ValidStartTime, ValidEndTime, 0m, _timeProvider);
+
+        // Assert
+        Assert.IsTrue(result.IsSuccess);
+        Assert.AreEqual(0m, result.Value.TicketPrice);
     }
 
     [TestMethod]
     public void Create_WithAllInvalidInputs_AccumulatesAllErrors()
     {
         // Act
-        var result = Event.Create("", "", "", Now.AddDays(-1), Now.AddDays(-2), 0, _timeProvider);
+        var result = Event.Create(Guid.Empty, "", "", Now.AddDays(-1), Now.AddDays(-2), -1m, _timeProvider);
 
         // Assert
         Assert.IsTrue(result.IsFailure);
@@ -142,8 +150,8 @@ public class EventTests
     [TestMethod]
     public void Create_WhenStartTimeEqualsNow_ReturnsFailureWithInvalidStartTimeError()
     {
-        // Act - exact boundary: "now" is not "in the future"
-        var result = Event.Create(ValidName, ValidVenue, ValidDescription, Now, ValidEndTime, ValidCapacity, _timeProvider);
+        // Act
+        var result = Event.Create(ValidVenueId, ValidName, ValidDescription, Now, ValidEndTime, ValidTicketPrice, _timeProvider);
 
         // Assert
         Assert.IsTrue(result.IsFailure);
@@ -158,7 +166,7 @@ public class EventTests
     public void Publish_WhenDraft_ReturnsSuccessWithPublishedStatus()
     {
         // Arrange
-        var draftEvent = Event.Create(ValidName, ValidVenue, ValidDescription, ValidStartTime, ValidEndTime, ValidCapacity, _timeProvider).Value;
+        var draftEvent = Event.Create(ValidVenueId, ValidName, ValidDescription, ValidStartTime, ValidEndTime, ValidTicketPrice, _timeProvider).Value;
         Assert.IsNotNull(draftEvent);
 
         // Act
@@ -173,7 +181,7 @@ public class EventTests
     public void Publish_WhenAlreadyPublished_ReturnsFailureWithCannotPublishError()
     {
         // Arrange
-        var publishedEvent = Event.Create(ValidName, ValidVenue, ValidDescription, ValidStartTime, ValidEndTime, ValidCapacity, _timeProvider).Value;
+        var publishedEvent = Event.Create(ValidVenueId, ValidName, ValidDescription, ValidStartTime, ValidEndTime, ValidTicketPrice, _timeProvider).Value;
         Assert.IsNotNull(publishedEvent);
         publishedEvent.Publish();
 
@@ -189,7 +197,7 @@ public class EventTests
     public void Publish_WhenCancelled_ReturnsFailureWithCannotPublishError()
     {
         // Arrange
-        var cancelledEvent = Event.Create(ValidName, ValidVenue, ValidDescription, ValidStartTime, ValidEndTime, ValidCapacity, _timeProvider).Value;
+        var cancelledEvent = Event.Create(ValidVenueId, ValidName, ValidDescription, ValidStartTime, ValidEndTime, ValidTicketPrice, _timeProvider).Value;
         Assert.IsNotNull(cancelledEvent);
         cancelledEvent.Cancel();
 
@@ -209,7 +217,7 @@ public class EventTests
     public void Cancel_WhenDraft_ReturnsSuccessWithCancelledStatus()
     {
         // Arrange
-        var draftEvent = Event.Create(ValidName, ValidVenue, ValidDescription, ValidStartTime, ValidEndTime, ValidCapacity, _timeProvider).Value;
+        var draftEvent = Event.Create(ValidVenueId, ValidName, ValidDescription, ValidStartTime, ValidEndTime, ValidTicketPrice, _timeProvider).Value;
         Assert.IsNotNull(draftEvent);
 
         // Act
@@ -224,7 +232,7 @@ public class EventTests
     public void Cancel_WhenPublished_ReturnsSuccessWithCancelledStatus()
     {
         // Arrange
-        var publishedEvent = Event.Create(ValidName, ValidVenue, ValidDescription, ValidStartTime, ValidEndTime, ValidCapacity, _timeProvider).Value;
+        var publishedEvent = Event.Create(ValidVenueId, ValidName, ValidDescription, ValidStartTime, ValidEndTime, ValidTicketPrice, _timeProvider).Value;
         Assert.IsNotNull(publishedEvent);
         publishedEvent.Publish();
 
@@ -240,7 +248,7 @@ public class EventTests
     public void Cancel_WhenAlreadyCancelled_ReturnsFailureWithCannotCancelError()
     {
         // Arrange
-        var cancelledEvent = Event.Create(ValidName, ValidVenue, ValidDescription, ValidStartTime, ValidEndTime, ValidCapacity, _timeProvider).Value;
+        var cancelledEvent = Event.Create(ValidVenueId, ValidName, ValidDescription, ValidStartTime, ValidEndTime, ValidTicketPrice, _timeProvider).Value;
         Assert.IsNotNull(cancelledEvent);
         cancelledEvent.Cancel();
 
