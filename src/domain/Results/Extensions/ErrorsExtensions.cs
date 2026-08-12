@@ -20,7 +20,7 @@ public static class ResultErrorExtensions
     // Group 2: Condition checks
     // ============================================================
 
-    public static bool Require(this ResultErrors errors, bool condition, ResultError error)
+    public static bool Validate(this ResultErrors errors, bool condition, ResultError error)
     {
         if (condition)
             return true;
@@ -29,7 +29,25 @@ public static class ResultErrorExtensions
         return false;
     }
 
-    public static bool Require<T>(this ResultErrors errors, [NotNullWhen(true)] T? value, ResultError error)
+    public static bool Validate(this ResultErrors errors, string? value, ResultError error)
+    {
+        if (!string.IsNullOrWhiteSpace(value))
+            return true;
+
+        errors.AddError(error);
+        return false;
+    }
+
+    public static bool Validate(this ResultErrors errors, Guid value, ResultError error)
+    {
+        if (value != Guid.Empty)
+            return true;
+
+        errors.AddError(error);
+        return false;
+    }
+
+    public static bool Validate<T>(this ResultErrors errors, [NotNullWhen(true)] T? value, ResultError error)
        where T : class
     {
         if (value is not null)

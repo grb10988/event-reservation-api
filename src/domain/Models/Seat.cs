@@ -1,4 +1,4 @@
-using EventReservation.Domain.Infrastructure;
+using EventReservation.Domain.Construction;
 
 namespace EventReservation.Domain.Models;
 
@@ -59,7 +59,7 @@ public sealed class Seat
         return Success(this);
     }
 
-    public sealed class Factory : ResultConstructor<Seat>
+    public sealed class Factory : ModelFactory<Seat>
     {
         private readonly Guid _venueId;
         private readonly string _section;
@@ -74,12 +74,12 @@ public sealed class Seat
             _number = number;
         }
 
-        internal Result<Seat> Create() => ExecuteSafely(() =>
+        protected override Result<Seat> CreateInternal()
         {
-            Require(_venueId != Guid.Empty, Errors.EmptyVenueId);
-            Require(!string.IsNullOrWhiteSpace(_section), Errors.EmptySection);
-            Require(_row > 0, Errors.EmptyRow);
-            Require(_number > 0, Errors.EmptyNumber);
+            Validate(_venueId, Errors.EmptyVenueId);
+            Validate(_section, Errors.EmptySection);
+            Validate(_row > 0, Errors.EmptyRow);
+            Validate(_number > 0, Errors.EmptyNumber);
 
             return HasErrors
                 ? ToFailureResult()
@@ -90,7 +90,7 @@ public sealed class Seat
                     _row,
                     _number,
                     SeatStatus.Available));
-        });
+        }
     }
 
     public static class Errors

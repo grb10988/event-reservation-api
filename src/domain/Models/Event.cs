@@ -1,4 +1,4 @@
-using EventReservation.Domain.Infrastructure;
+using EventReservation.Domain.Construction;
 
 namespace EventReservation.Domain.Models;
 
@@ -75,7 +75,7 @@ public sealed class Event
         return Success(this);
     }
 
-    private sealed class Factory : ResultConstructor<Event>
+    private sealed class Factory : ModelFactory<Event>
     {
         private readonly Guid _venueId;
         private readonly string _name;
@@ -103,14 +103,14 @@ public sealed class Event
             _timeProvider = timeProvider;
         }
 
-        internal Result<Event> Create() => ExecuteSafely(() =>
+        protected override Result<Event> CreateInternal()
         {
-            Require(_venueId != Guid.Empty, Errors.EmptyVenueId);
-            Require(!string.IsNullOrWhiteSpace(_name), Errors.EmptyName);
-            Require(!string.IsNullOrWhiteSpace(_description), Errors.EmptyDescription);
-            Require(_startTime > _timeProvider.GetUtcNow(), Errors.InvalidStartTime);
-            Require(_endTime > _startTime, Errors.InvalidEndTime);
-            Require(_ticketPrice >= 0, Errors.InvalidTicketPrice);
+            Validate(_venueId, Errors.EmptyVenueId);
+            Validate(_name, Errors.EmptyName);
+            Validate(_description, Errors.EmptyDescription);
+            Validate(_startTime > _timeProvider.GetUtcNow(), Errors.InvalidStartTime);
+            Validate(_endTime > _startTime, Errors.InvalidEndTime);
+            Validate(_ticketPrice >= 0, Errors.InvalidTicketPrice);
 
             return HasErrors
                 ? ToFailureResult()
@@ -123,7 +123,7 @@ public sealed class Event
                     _endTime,
                     _ticketPrice,
                     EventStatus.Draft));
-        });
+        }
     }
 
     public static class Errors

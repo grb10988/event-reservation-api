@@ -17,7 +17,7 @@ public static partial class ResultExtensions
         }
         catch (Exception ex)
         {
-            ResultTryExceptionHandling.RethrowIfCritical(ex);
+            TryExceptionHandler.RethrowIfCritical(ex);
             return Failure<TNew>(exceptionHandler(ex));
         }
     }
@@ -33,7 +33,7 @@ public static partial class ResultExtensions
         }
         catch (Exception ex)
         {
-            ResultTryExceptionHandling.RethrowIfCritical(ex);
+            TryExceptionHandler.RethrowIfCritical(ex);
             return Failure<TNew>(exceptionHandler(ex));
         }
     }
@@ -57,7 +57,7 @@ public static partial class ResultExtensions
         }
         catch (Exception ex)
         {
-            ResultTryExceptionHandling.RethrowIfCritical(ex);
+            TryExceptionHandler.RethrowIfCritical(ex);
             return Failure<TNew>(exceptionHandler(ex));
         }
     }
@@ -77,7 +77,7 @@ public static partial class ResultExtensions
         }
         catch (Exception ex)
         {
-            ResultTryExceptionHandling.RethrowIfCritical(ex);
+            TryExceptionHandler.RethrowIfCritical(ex);
             return Failure<TNew>(exceptionHandler(ex));
         }
     }
@@ -93,7 +93,7 @@ public static partial class ResultExtensions
         }
         catch (Exception ex)
         {
-            ResultTryExceptionHandling.RethrowIfCritical(ex);
+            TryExceptionHandler.RethrowIfCritical(ex);
             return Failure<TNew>(exceptionHandler(ex));
         }
     }
@@ -117,7 +117,7 @@ public static partial class ResultExtensions
         }
         catch (Exception ex)
         {
-            ResultTryExceptionHandling.RethrowIfCritical(ex);
+            TryExceptionHandler.RethrowIfCritical(ex);
             return Failure<TNew>(exceptionHandler(ex));
         }
     }

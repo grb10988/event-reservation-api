@@ -2,7 +2,7 @@ using System.Runtime.ExceptionServices;
 
 namespace EventReservation.Domain.Results.Extensions;
 
-internal static class ResultTryExceptionHandling
+internal static class TryExceptionHandler
 {
     public static void RethrowIfCritical(Exception ex)
     {

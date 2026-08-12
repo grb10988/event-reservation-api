@@ -1,12 +1,12 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
 
-namespace EventReservation.Domain.Infrastructure;
+namespace EventReservation.Domain.Construction;
 
 public static class BuilderFactory
 {
     public static Result<TModel> Create<TModel, TBuilder>(Action<TBuilder> configure)
-        where TBuilder : IFluentBuilder<TModel>
+        where TBuilder : IModelBuilder<TModel>
     {
         if (configure is null)
             return Failure<TModel>(Errors.EmptyConfiguration);

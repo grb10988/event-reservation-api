@@ -1,4 +1,4 @@
-using EventReservation.Domain.Infrastructure;
+using EventReservation.Domain.Construction;
 
 namespace EventReservation.Domain.Models;
 
@@ -20,7 +20,7 @@ public sealed class Venue
     public static Result<Venue> Create(string name, string address, int capacity) =>
         new Factory(name, address, capacity).Create();
 
-    private sealed class Factory : ResultConstructor<Venue>
+    private sealed class Factory : ModelFactory<Venue>
     {
         private readonly string _name;
         private readonly string _address;
@@ -33,16 +33,16 @@ public sealed class Venue
             _capacity = capacity;
         }
 
-        internal Result<Venue> Create() => ExecuteSafely(() =>
+        protected override Result<Venue> CreateInternal()
         {
-            Require(!string.IsNullOrWhiteSpace(_name), Errors.EmptyName);
-            Require(!string.IsNullOrWhiteSpace(_address), Errors.EmptyAddress);
-            Require(_capacity > 0, Errors.InvalidCapacity);
-            
+            Validate(_name, Errors.EmptyName);
+            Validate(_address, Errors.EmptyAddress);
+            Validate(_capacity > 0, Errors.InvalidCapacity);
+
             return HasErrors
                 ? ToFailureResult()
                 : Success(new Venue(Guid.CreateVersion7(), _name, _address, _capacity));
-        });
+        }
     }
 
     public static class Errors

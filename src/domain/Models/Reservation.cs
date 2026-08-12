@@ -1,4 +1,4 @@
-using EventReservation.Domain.Infrastructure;
+using EventReservation.Domain.Construction;
 
 namespace EventReservation.Domain.Models;
 
@@ -79,7 +79,7 @@ public sealed class Reservation
         return Success(this);
     }
 
-    private sealed class Factory : ResultConstructor<Reservation>
+    private sealed class Factory : ModelFactory<Reservation>
     {
         private readonly Guid _seatId;
         private readonly Guid _eventId;
@@ -104,13 +104,13 @@ public sealed class Reservation
             _holdDuration = holdDuration;
         }
 
-        internal Result<Reservation> Create() => ExecuteSafely(() =>
+        protected override Result<Reservation> CreateInternal()
         {
-            Require(_seatId != Guid.Empty, Errors.EmptySeatId);
-            Require(_eventId != Guid.Empty, Errors.EmptyEventId);
-            Require(_customerId != Guid.Empty, Errors.EmptyCustomerId);
-            Require(_price >= 0, Errors.InvalidPrice);
-            Require(_holdDuration is null or { Ticks: > 0 }, Errors.InvalidHoldDuration);
+            Validate(_seatId, Errors.EmptySeatId);
+            Validate(_eventId, Errors.EmptyEventId);
+            Validate(_customerId, Errors.EmptyCustomerId);
+            Validate(_price >= 0, Errors.InvalidPrice);
+            Validate(_holdDuration is null or { Ticks: > 0 }, Errors.InvalidHoldDuration);
 
             if (HasErrors)
                 return ToFailureResult();
@@ -127,7 +127,7 @@ public sealed class Reservation
                 ReservationStatus.Held,
                 now,
                 now + duration));
-        });
+        }
     }
 
     public static class Errors
