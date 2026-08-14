@@ -38,6 +38,17 @@ public class OrderTests
     }
 
     [TestMethod]
+    public void Create_ReturnsOrderWithNoConfirmationNumberYet()
+    {
+        // Act
+        var result = Order.Create(ValidCustomerId, ValidReservationIds, _timeProvider);
+
+        // Assert
+        Assert.IsTrue(result.IsSuccess);
+        Assert.IsNull(result.Value.ConfirmationNumber);
+    }
+
+    [TestMethod]
     public void Create_WithEmptyCustomerId_ReturnsFailureWithEmptyCustomerIdError()
     {
         // Act
@@ -148,6 +159,48 @@ public class OrderTests
         // Assert
         Assert.IsTrue(result.IsSuccess);
         Assert.AreEqual(OrderStatus.Completed, result.Value.Status);
+    }
+
+    [TestMethod]
+    public void Complete_WhenPending_SetsConfirmationNumberInExpectedFormat()
+    {
+        // Arrange
+        var order = Order.Create(ValidCustomerId, ValidReservationIds, _timeProvider).Value;
+        Assert.IsNotNull(order);
+
+        // Act
+        var result = order.Complete();
+
+        // Assert
+        Assert.IsTrue(result.IsSuccess);
+        var confirmationNumber = result.Value.ConfirmationNumber;
+        Assert.IsNotNull(confirmationNumber);
+
+        var segments = confirmationNumber.Split('-');
+        Assert.AreEqual(Order.ConfirmationSegmentCount, segments.Length);
+
+        foreach (var segment in segments)
+        {
+            Assert.AreEqual(Order.ConfirmationSegmentLength, segment.Length);
+            Assert.IsTrue(segment.All(c => Order.ConfirmationCharacters.Contains(c)));
+        }
+    }
+
+    [TestMethod]
+    public void Complete_CalledOnTwoDifferentOrders_GeneratesDifferentConfirmationNumbers()
+    {
+        // Arrange
+        var first = Order.Create(ValidCustomerId, ValidReservationIds, _timeProvider).Value;
+        var second = Order.Create(ValidCustomerId, ValidReservationIds, _timeProvider).Value;
+        Assert.IsNotNull(first);
+        Assert.IsNotNull(second);
+
+        // Act
+        first.Complete();
+        second.Complete();
+
+        // Assert
+        Assert.AreNotEqual(first.ConfirmationNumber, second.ConfirmationNumber);
     }
 
     [TestMethod]

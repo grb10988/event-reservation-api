@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using EventReservation.Domain.Construction;
 
 namespace EventReservation.Domain.Models;
@@ -12,10 +13,15 @@ public enum OrderStatus
 
 public sealed class Order
 {
+    internal const string ConfirmationCharacters = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no 0/O/1/I/L
+    internal const int ConfirmationSegmentLength = 4;
+    internal const int ConfirmationSegmentCount = 3;
+
     public Guid Id { get; }
     public Guid CustomerId { get; }
     public IReadOnlyCollection<Guid> ReservationIds { get; }
     public OrderStatus Status { get; private set; }
+    public string? ConfirmationNumber { get; private set; }
     public DateTimeOffset CreatedAt { get; }
 
     private Order(
@@ -44,6 +50,7 @@ public sealed class Order
             return Failure<Order>(Errors.CannotComplete);
 
         Status = OrderStatus.Completed;
+        ConfirmationNumber = GenerateConfirmationNumber();
         return Success(this);
     }
 
@@ -63,6 +70,22 @@ public sealed class Order
 
         Status = OrderStatus.Refunded;
         return Success(this);
+    }
+
+    private static string GenerateConfirmationNumber()
+    {
+        var segments = new string[ConfirmationSegmentCount];
+        Span<char> segment = stackalloc char[ConfirmationSegmentLength];
+
+        for (var s = 0; s < ConfirmationSegmentCount; s++)
+        {
+            for (var i = 0; i < ConfirmationSegmentLength; i++)
+                segment[i] = ConfirmationCharacters[RandomNumberGenerator.GetInt32(ConfirmationCharacters.Length)];
+
+            segments[s] = new string(segment);
+        }
+
+        return string.Join('-', segments);
     }
 
     private sealed class Factory : ModelFactory<Order>
