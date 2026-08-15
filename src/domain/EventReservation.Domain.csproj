@@ -2,7 +2,9 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="EventReservation.Tests.Domain" />
+    <InternalsVisibleTo Include="EventReservation.Infrastructure" />
   </ItemGroup>
+
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>

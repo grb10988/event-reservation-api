@@ -387,4 +387,151 @@ public class OrderTests
         Assert.IsTrue(result.IsFailure);
         CollectionAssert.Contains(result.Errors.ToList(), Order.Errors.CannotRefund);
     }
+
+    // ============================================================
+    // IsValidConfirmationNumberFormat
+    // ============================================================
+
+    private static string BuildValidConfirmationNumber()
+    {
+        var segment = new string(Order.ConfirmationCharacters[0], Order.ConfirmationSegmentLength);
+        return string.Join('-', Enumerable.Repeat(segment, Order.ConfirmationSegmentCount));
+    }
+
+    [TestMethod]
+    public void IsValidConfirmationNumberFormat_WithWellFormedValue_ReturnsTrue()
+    {
+        // Act
+        var isValid = Order.IsValidConfirmationNumberFormat(BuildValidConfirmationNumber());
+
+        // Assert
+        Assert.IsTrue(isValid);
+    }
+
+    [TestMethod]
+    public void IsValidConfirmationNumberFormat_WithNull_ReturnsFalse()
+    {
+        // Act
+        var isValid = Order.IsValidConfirmationNumberFormat(null);
+
+        // Assert
+        Assert.IsFalse(isValid);
+    }
+
+    [TestMethod]
+    public void IsValidConfirmationNumberFormat_WithEmpty_ReturnsFalse()
+    {
+        // Act
+        var isValid = Order.IsValidConfirmationNumberFormat(string.Empty);
+
+        // Assert
+        Assert.IsFalse(isValid);
+    }
+
+    [TestMethod]
+    public void IsValidConfirmationNumberFormat_WithMissingSeparators_ReturnsFalse()
+    {
+        // Arrange
+        var withoutSeparators = BuildValidConfirmationNumber().Replace("-", string.Empty);
+
+        // Act
+        var isValid = Order.IsValidConfirmationNumberFormat(withoutSeparators);
+
+        // Assert
+        Assert.IsFalse(isValid);
+    }
+
+    [TestMethod]
+    public void IsValidConfirmationNumberFormat_WithSegmentTooShort_ReturnsFalse()
+    {
+        // Arrange
+        var valid = BuildValidConfirmationNumber();
+        var tooShort = valid[..^1];
+
+        // Act
+        var isValid = Order.IsValidConfirmationNumberFormat(tooShort);
+
+        // Assert
+        Assert.IsFalse(isValid);
+    }
+
+    [TestMethod]
+    public void IsValidConfirmationNumberFormat_WithSegmentTooLong_ReturnsFalse()
+    {
+        // Arrange
+        var tooLong = BuildValidConfirmationNumber() + Order.ConfirmationCharacters[0];
+
+        // Act
+        var isValid = Order.IsValidConfirmationNumberFormat(tooLong);
+
+        // Assert
+        Assert.IsFalse(isValid);
+    }
+
+    [TestMethod]
+    public void IsValidConfirmationNumberFormat_WithDisallowedCharacter_ReturnsFalse()
+    {
+        // Arrange
+        var valid = BuildValidConfirmationNumber();
+        var withDisallowedChar = '0' + valid[1..];
+
+        // Act
+        var isValid = Order.IsValidConfirmationNumberFormat(withDisallowedChar);
+
+        // Assert
+        Assert.IsFalse(isValid);
+    }
+
+    [TestMethod]
+    public void IsValidConfirmationNumberFormat_WithExtraSegment_ReturnsFalse()
+    {
+        // Arrange
+        var extraSegment = new string(Order.ConfirmationCharacters[0], Order.ConfirmationSegmentLength);
+        var tooManySegments = BuildValidConfirmationNumber() + "-" + extraSegment;
+
+        // Act
+        var isValid = Order.IsValidConfirmationNumberFormat(tooManySegments);
+
+        // Assert
+        Assert.IsFalse(isValid);
+    }
+
+    // ============================================================
+    // Rehydrate
+    // ============================================================
+
+    [TestMethod]
+    public void Rehydrate_WithGivenValues_ReturnsOrderWithThoseExactValues()
+    {
+        // Arrange
+        var id = Guid.NewGuid();
+        var createdAt = Now.AddDays(-1);
+
+        // Act
+        var order = Order.Rehydrate(id, ValidCustomerId, ValidReservationIds, OrderStatus.Pending, null, createdAt);
+
+        // Assert
+        Assert.AreEqual(id, order.Id);
+        Assert.AreEqual(ValidCustomerId, order.CustomerId);
+        CollectionAssert.AreEqual(ValidReservationIds.ToList(), order.ReservationIds.ToList());
+        Assert.AreEqual(OrderStatus.Pending, order.Status);
+        Assert.IsNull(order.ConfirmationNumber);
+        Assert.AreEqual(createdAt, order.CreatedAt);
+    }
+
+    [TestMethod]
+    public void Rehydrate_ForCompletedOrder_RestoresConfirmationNumber()
+    {
+        // Arrange
+        var id = Guid.NewGuid();
+        var createdAt = Now.AddDays(-1);
+        var confirmationNumber = BuildValidConfirmationNumber();
+
+        // Act
+        var order = Order.Rehydrate(id, ValidCustomerId, ValidReservationIds, OrderStatus.Completed, confirmationNumber, createdAt);
+
+        // Assert
+        Assert.AreEqual(OrderStatus.Completed, order.Status);
+        Assert.AreEqual(confirmationNumber, order.ConfirmationNumber);
+    }
 }

@@ -340,4 +340,30 @@ public class ReservationTests
         Assert.IsTrue(result.IsFailure);
         CollectionAssert.Contains(result.Errors.ToList(), Reservation.Errors.CannotExpire);
     }
+
+    // ============================================================
+    // Rehydrate
+    // ============================================================
+
+    [TestMethod]
+    public void Rehydrate_WithGivenValues_ReturnsReservationWithThoseExactValues()
+    {
+        // Arrange
+        var id = Guid.NewGuid();
+        var createdAt = Now.AddDays(-1);
+        var holdExpiresAt = createdAt.AddMinutes(15);
+
+        // Act
+        var reservation = Reservation.Rehydrate(id, ValidSeatId, ValidEventId, ValidCustomerId, ValidPrice, ReservationStatus.Confirmed, createdAt, holdExpiresAt);
+
+        // Assert
+        Assert.AreEqual(id, reservation.Id);
+        Assert.AreEqual(ValidSeatId, reservation.SeatId);
+        Assert.AreEqual(ValidEventId, reservation.EventId);
+        Assert.AreEqual(ValidCustomerId, reservation.CustomerId);
+        Assert.AreEqual(ValidPrice, reservation.Price);
+        Assert.AreEqual(ReservationStatus.Confirmed, reservation.Status);
+        Assert.AreEqual(createdAt, reservation.CreatedAt);
+        Assert.AreEqual(holdExpiresAt, reservation.HoldExpiresAt);
+    }
 }

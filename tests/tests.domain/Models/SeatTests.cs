@@ -22,11 +22,23 @@ public class SeatTests
 
         // Assert
         Assert.IsTrue(result.IsSuccess);
+        Assert.AreEqual(ValidVenueId, result.Value.VenueId);
         Assert.AreEqual(ValidSection, result.Value.Section);
         Assert.AreEqual(ValidRow, result.Value.Row);
         Assert.AreEqual(ValidNumber, result.Value.Number);
         Assert.AreEqual(SeatStatus.Available, result.Value.Status);
         Assert.AreNotEqual(Guid.Empty, result.Value.Id);
+    }
+
+    [TestMethod]
+    public void Create_WithEmptyVenueId_ReturnsFailureWithEmptyVenueIdError()
+    {
+        // Act
+        var result = Seat.Create(Guid.Empty, ValidSection, ValidRow, ValidNumber);
+
+        // Assert
+        Assert.IsTrue(result.IsFailure);
+        CollectionAssert.Contains(result.Errors.ToList(), Seat.Errors.EmptyVenueId);
     }
 
     [TestMethod]
@@ -70,7 +82,7 @@ public class SeatTests
     }
 
     [TestMethod]
-    public void Create_WithAllInvalidInputs_AccumulatesAllErrors()
+    public void Create_WithAllInvalidInputs_AccumulatesAllFourErrors()
     {
         // Act
         var result = Seat.Create(Guid.Empty, "", 0, 0);
@@ -247,5 +259,27 @@ public class SeatTests
         // Assert
         Assert.IsTrue(result.IsFailure);
         CollectionAssert.Contains(result.Errors.ToList(), Seat.Errors.CannotRelease);
+    }
+
+    // ============================================================
+    // Rehydrate
+    // ============================================================
+
+    [TestMethod]
+    public void Rehydrate_WithGivenValues_ReturnsSeatWithThoseExactValues()
+    {
+        // Arrange
+        var id = Guid.NewGuid();
+
+        // Act
+        var seat = Seat.Rehydrate(id, ValidVenueId, ValidSection, ValidRow, ValidNumber, SeatStatus.Held);
+
+        // Assert
+        Assert.AreEqual(id, seat.Id);
+        Assert.AreEqual(ValidVenueId, seat.VenueId);
+        Assert.AreEqual(ValidSection, seat.Section);
+        Assert.AreEqual(ValidRow, seat.Row);
+        Assert.AreEqual(ValidNumber, seat.Number);
+        Assert.AreEqual(SeatStatus.Held, seat.Status);
     }
 }

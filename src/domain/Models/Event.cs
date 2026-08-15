@@ -13,11 +13,11 @@ public sealed class Event
 {
     public Guid Id { get; }
     public Guid VenueId { get; }
-    public string Name { get; }
-    public string Description { get; }
-    public DateTimeOffset StartTime { get; }
-    public DateTimeOffset EndTime { get; }
-    public decimal TicketPrice { get; }
+    public string Name { get; private set; }
+    public string Description { get; private set; }
+    public DateTimeOffset StartTime { get; private set; }
+    public DateTimeOffset EndTime { get; private set; }
+    public decimal TicketPrice { get; private set; }
     public EventStatus Status { get; private set; }
 
     private Event(
@@ -47,8 +47,8 @@ public sealed class Event
         DateTimeOffset startTime,
         DateTimeOffset endTime,
         decimal ticketPrice,
-        TimeProvider timeProvider)
-        => new Factory(
+        TimeProvider timeProvider) =>
+        new Factory(
             venueId,
             name,
             description,
@@ -56,6 +56,97 @@ public sealed class Event
             endTime,
             ticketPrice,
             timeProvider).Create();
+
+    internal static Event Rehydrate(
+        Guid id,
+        Guid venueId,
+        string name,
+        string description,
+        DateTimeOffset startTime,
+        DateTimeOffset endTime,
+        decimal ticketPrice,
+        EventStatus status) =>
+        new(
+            id,
+            venueId,
+            name,
+            description,
+            startTime,
+            endTime,
+            ticketPrice,
+            status);
+
+    private static ResultErrors ValidateVenueId(Guid venueId) => ResultErrors.Collect(errors =>
+    {
+        errors.Validate(venueId, Errors.EmptyVenueId);
+    });
+
+    private static ResultErrors ValidateName(string? name) => ResultErrors.Collect(errors =>
+    {
+        errors.Validate(name, Errors.EmptyName);
+    });
+
+    private static ResultErrors ValidateDescription(string? description) => ResultErrors.Collect(errors =>
+    {
+        errors.Validate(description, Errors.EmptyDescription);
+    });
+
+    private static ResultErrors ValidateStartTime(DateTimeOffset startTime, DateTimeOffset now) => ResultErrors.Collect(errors =>
+    {
+        errors.Validate(startTime > now, Errors.InvalidStartTime);
+    });
+
+    private static ResultErrors ValidateEndTime(DateTimeOffset endTime, DateTimeOffset startTime) => ResultErrors.Collect(errors =>
+    {
+        errors.Validate(endTime > startTime, Errors.InvalidEndTime);
+    });
+
+    private static ResultErrors ValidateReschedule(DateTimeOffset startTime, DateTimeOffset endTime, DateTimeOffset now) =>
+        ResultErrors.Collect(errors =>
+        {
+            errors.AddError(ValidateStartTime(startTime, now).Errors);
+            errors.AddError(ValidateEndTime(endTime, startTime).Errors);
+        });
+
+    private static ResultErrors ValidateTicketPrice(decimal ticketPrice) => ResultErrors.Collect(errors =>
+    {
+        errors.Validate(ticketPrice >= 0, Errors.InvalidTicketPrice);
+    });
+
+    public Result<Event> ChangeName(string newName) =>
+        Success(this)
+            .Ensure(_ => ValidateName(newName))
+            .Tap(e => e.Name = newName);
+
+    public Result<Event> ChangeDescription(string newDescription) =>
+        Success(this)
+            .Ensure(_ => ValidateDescription(newDescription))
+            .Tap(e => e.Description = newDescription);
+
+    public Result<Event> ChangeStartTime(DateTimeOffset newStartTime, TimeProvider timeProvider) =>
+        Success(this)
+            .Ensure(_ => ValidateStartTime(newStartTime, timeProvider.GetUtcNow()))
+            .Ensure(_ => ValidateEndTime(EndTime, newStartTime))
+            .Tap(e => e.StartTime = newStartTime);
+
+    public Result<Event> ChangeEndTime(DateTimeOffset newEndTime) =>
+        Success(this)
+            .Ensure(_ => ValidateEndTime(newEndTime, StartTime))
+            .Tap(e => e.EndTime = newEndTime);
+
+    public Result<Event> Reschedule(DateTimeOffset newStartTime, DateTimeOffset newEndTime, TimeProvider timeProvider) =>
+        Success(this)
+            .Ensure(_ => ValidateReschedule(newStartTime, newEndTime, timeProvider.GetUtcNow()))
+            .Tap(e =>
+            {
+                e.StartTime = newStartTime;
+                e.EndTime = newEndTime;
+            });
+
+    public Result<Event> ChangeTicketPrice(decimal newTicketPrice) =>
+        Success(this)
+            .Ensure(_ => ValidateTicketPrice(newTicketPrice))
+            .Tap(e => e.TicketPrice = newTicketPrice);
 
     public Result<Event> Publish()
     {
@@ -105,12 +196,14 @@ public sealed class Event
 
         protected override Result<Event> CreateInternal()
         {
-            Validate(_venueId, Errors.EmptyVenueId);
-            Validate(_name, Errors.EmptyName);
-            Validate(_description, Errors.EmptyDescription);
-            Validate(_startTime > _timeProvider.GetUtcNow(), Errors.InvalidStartTime);
-            Validate(_endTime > _startTime, Errors.InvalidEndTime);
-            Validate(_ticketPrice >= 0, Errors.InvalidTicketPrice);
+            var now = _timeProvider.GetUtcNow();
+
+            AddErrors(ValidateVenueId(_venueId).Errors);
+            AddErrors(ValidateName(_name).Errors);
+            AddErrors(ValidateDescription(_description).Errors);
+            AddErrors(ValidateStartTime(_startTime, now).Errors);
+            AddErrors(ValidateEndTime(_endTime, _startTime).Errors);
+            AddErrors(ValidateTicketPrice(_ticketPrice).Errors);
 
             return HasErrors
                 ? ToFailureResult()

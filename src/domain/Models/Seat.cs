@@ -32,6 +32,29 @@ public sealed class Seat
     public static Result<Seat> Create(Guid venueId, string section, int row, int number)
         => new Factory(venueId, section, row, number).Create();
 
+    internal static Seat Rehydrate(Guid id, Guid venueId, string section, int row, int number, SeatStatus status) =>
+        new(id, venueId, section, row, number, status);
+
+    private static ResultErrors ValidateVenueId(Guid venueId) => ResultErrors.Collect(errors =>
+    {
+        errors.Validate(venueId, Errors.EmptyVenueId);
+    });
+
+    private static ResultErrors ValidateSection(string? section) => ResultErrors.Collect(errors =>
+    {
+        errors.Validate(section, Errors.EmptySection);
+    });
+
+    private static ResultErrors ValidateRow(int row) => ResultErrors.Collect(errors =>
+    {
+        errors.Validate(row > 0, Errors.EmptyRow);
+    });
+
+    private static ResultErrors ValidateNumber(int number) => ResultErrors.Collect(errors =>
+    {
+        errors.Validate(number > 0, Errors.EmptyNumber);
+    });
+
     public Result<Seat> Hold()
     {
         if (Status != SeatStatus.Available)
@@ -76,10 +99,10 @@ public sealed class Seat
 
         protected override Result<Seat> CreateInternal()
         {
-            Validate(_venueId, Errors.EmptyVenueId);
-            Validate(_section, Errors.EmptySection);
-            Validate(_row > 0, Errors.EmptyRow);
-            Validate(_number > 0, Errors.EmptyNumber);
+            AddErrors(ValidateVenueId(_venueId).Errors);
+            AddErrors(ValidateSection(_section).Errors);
+            AddErrors(ValidateRow(_row).Errors);
+            AddErrors(ValidateNumber(_number).Errors);
 
             return HasErrors
                 ? ToFailureResult()

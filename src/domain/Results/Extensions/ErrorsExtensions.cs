@@ -29,7 +29,7 @@ public static class ResultErrorExtensions
         return false;
     }
 
-    public static bool Validate(this ResultErrors errors, string? value, ResultError error)
+    public static bool Validate(this ResultErrors errors, [NotNullWhen(true)]string? value, ResultError error)
     {
         if (!string.IsNullOrWhiteSpace(value))
             return true;

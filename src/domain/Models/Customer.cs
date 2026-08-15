@@ -6,9 +6,9 @@ namespace EventReservation.Domain.Models;
 public sealed class Customer
 {
     public Guid Id { get; }
-    public string FirstName { get; }
-    public string LastName { get; }
-    public string Email { get; }
+    public string FirstName { get; private set; }
+    public string LastName { get; private set; }
+    public string Email { get; private set; }
 
     private Customer(Guid id, string firstName, string lastName, string email)
     {
@@ -21,6 +21,40 @@ public sealed class Customer
     public static Result<Customer> Create(string firstName, string lastName, string email) =>
         new Factory(firstName, lastName, email).Create();
 
+    internal static Customer Rehydrate(Guid id, string firstName, string lastName, string email) =>
+        new(id, firstName, lastName, email);
+
+    private static ResultErrors ValidateFirstName(string? firstName) => ResultErrors.Collect(errors =>
+    {
+        errors.Validate(firstName, Errors.EmptyFirstName);
+    });
+
+    private static ResultErrors ValidateLastName(string? lastName) => ResultErrors.Collect(errors =>
+    {
+        errors.Validate(lastName, Errors.EmptyLastName);
+    });
+
+    private static ResultErrors ValidateEmail(string? email) => ResultErrors.Collect(errors =>
+    {
+        if (errors.Validate(email, Errors.EmptyEmail))
+            errors.Validate(MailAddress.TryCreate(email, out _), Errors.InvalidEmail);
+    });
+
+    public Result<Customer> ChangeFirstName(string newFirstName) =>
+        Success(this)
+            .Ensure(_ => ValidateFirstName(newFirstName))
+            .Tap(c => c.FirstName = newFirstName);
+
+    public Result<Customer> ChangeLastName(string newLastName) =>
+        Success(this)
+            .Ensure(_ => ValidateLastName(newLastName))
+            .Tap(c => c.LastName = newLastName);
+
+    public Result<Customer> ChangeEmail(string newEmail) =>
+        Success(this)
+            .Ensure(_ => ValidateEmail(newEmail))
+            .Tap(c => c.Email = newEmail);
+    
     private sealed class Factory : ModelFactory<Customer>
     {
         private readonly string _firstName;
@@ -36,14 +70,9 @@ public sealed class Customer
 
         protected override Result<Customer> CreateInternal()
         {
-            Validate(_firstName, Errors.EmptyFirstName);
-            Validate(_lastName, Errors.EmptyLastName);
-            Validate(_email, Errors.EmptyEmail);
-
-            if (HasErrors)
-                return ToFailureResult();
-
-            Validate(MailAddress.TryCreate(_email, out _), Errors.InvalidEmail);
+            AddErrors(ValidateFirstName(_firstName).Errors);
+            AddErrors(ValidateLastName(_lastName).Errors);
+            AddErrors(ValidateEmail(_email).Errors);
 
             return HasErrors
                 ? ToFailureResult()

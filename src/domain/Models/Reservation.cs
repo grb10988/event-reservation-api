@@ -52,6 +52,42 @@ public sealed class Reservation
         TimeSpan? holdDuration = null) =>
         new Factory(seatId, eventId, customerId, price, timeProvider, holdDuration).Create();
 
+    internal static Reservation Rehydrate(
+        Guid id,
+        Guid seatId,
+        Guid eventId,
+        Guid customerId,
+        decimal price,
+        ReservationStatus status,
+        DateTimeOffset createdAt,
+        DateTimeOffset holdExpiresAt) =>
+        new(id, seatId, eventId, customerId, price, status, createdAt, holdExpiresAt);
+
+    private static ResultErrors ValidateSeatId(Guid seatId) => ResultErrors.Collect(errors =>
+    {
+        errors.Validate(seatId, Errors.EmptySeatId);
+    });
+
+    private static ResultErrors ValidateEventId(Guid eventId) => ResultErrors.Collect(errors =>
+    {
+        errors.Validate(eventId, Errors.EmptyEventId);
+    });
+
+    private static ResultErrors ValidateCustomerId(Guid customerId) => ResultErrors.Collect(errors =>
+    {
+        errors.Validate(customerId, Errors.EmptyCustomerId);
+    });
+
+    private static ResultErrors ValidatePrice(decimal price) => ResultErrors.Collect(errors =>
+    {
+        errors.Validate(price >= 0, Errors.InvalidPrice);
+    });
+
+    private static ResultErrors ValidateHoldDuration(TimeSpan? holdDuration) => ResultErrors.Collect(errors =>
+    {
+        errors.Validate(holdDuration is null or { Ticks: > 0 }, Errors.InvalidHoldDuration);
+    });
+
     public Result<Reservation> Confirm()
     {
         if (Status != ReservationStatus.Held)
@@ -106,11 +142,11 @@ public sealed class Reservation
 
         protected override Result<Reservation> CreateInternal()
         {
-            Validate(_seatId, Errors.EmptySeatId);
-            Validate(_eventId, Errors.EmptyEventId);
-            Validate(_customerId, Errors.EmptyCustomerId);
-            Validate(_price >= 0, Errors.InvalidPrice);
-            Validate(_holdDuration is null or { Ticks: > 0 }, Errors.InvalidHoldDuration);
+            AddErrors(ValidateSeatId(_seatId).Errors);
+            AddErrors(ValidateEventId(_eventId).Errors);
+            AddErrors(ValidateCustomerId(_customerId).Errors);
+            AddErrors(ValidatePrice(_price).Errors);
+            AddErrors(ValidateHoldDuration(_holdDuration).Errors);
 
             if (HasErrors)
                 return ToFailureResult();

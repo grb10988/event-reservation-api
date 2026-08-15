@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Text.RegularExpressions;
 using EventReservation.Domain.Construction;
 
 namespace EventReservation.Domain.Models;
@@ -43,6 +44,43 @@ public sealed class Order
         IReadOnlyCollection<Guid> reservationIds,
         TimeProvider timeProvider) =>
         new Factory(customerId, reservationIds, timeProvider).Create();
+
+    internal static Order Rehydrate(
+        Guid id,
+        Guid customerId,
+        IReadOnlyCollection<Guid> reservationIds,
+        OrderStatus status,
+        string? confirmationNumber,
+        DateTimeOffset createdAt) =>
+        new(id, customerId, reservationIds, status, createdAt) { ConfirmationNumber = confirmationNumber };
+
+    private static ResultErrors ValidateCustomerId(Guid customerId) => ResultErrors.Collect(errors =>
+    {
+        errors.Validate(customerId, Errors.EmptyCustomerId);
+    });
+
+    private static ResultErrors ValidateReservationIds(IReadOnlyCollection<Guid>? reservationIds) => ResultErrors.Collect(errors =>
+    {
+        if (reservationIds is not { Count: > 0 } nonEmptyIds)
+        {
+            errors.AddError(Errors.EmptyReservationIds);
+            return;
+        }
+
+        errors.Validate(nonEmptyIds.All(id => id != Guid.Empty), Errors.InvalidReservationId);
+        errors.Validate(nonEmptyIds.Distinct().Count() == nonEmptyIds.Count, Errors.DuplicateReservationIds);
+    });
+
+    private static readonly Lazy<Regex> ConfirmationNumberPattern = new(() =>
+    {
+        var charClass = $"[{Regex.Escape(ConfirmationCharacters)}]";
+        var segment = $"{charClass}{{{ConfirmationSegmentLength}}}";
+        var pattern = string.Join('-', Enumerable.Repeat(segment, ConfirmationSegmentCount));
+        return new Regex($"^{pattern}$");
+    });
+
+    public static bool IsValidConfirmationNumberFormat(string? confirmationNumber) =>
+        !string.IsNullOrWhiteSpace(confirmationNumber) && ConfirmationNumberPattern.Value.IsMatch(confirmationNumber);
 
     public Result<Order> Complete()
     {
@@ -103,14 +141,8 @@ public sealed class Order
 
         protected override Result<Order> CreateInternal()
         {
-            Validate(_customerId, Errors.EmptyCustomerId);
-            Validate(_reservationIds is { Count: > 0 }, Errors.EmptyReservationIds);
-
-            if (HasErrors)
-                return ToFailureResult();
-
-            Validate(_reservationIds.All(id => id != Guid.Empty), Errors.InvalidReservationId);
-            Validate(_reservationIds.Distinct().Count() == _reservationIds.Count, Errors.DuplicateReservationIds);
+            AddErrors(ValidateCustomerId(_customerId).Errors);
+            AddErrors(ValidateReservationIds(_reservationIds).Errors);
 
             return HasErrors
                 ? ToFailureResult()
