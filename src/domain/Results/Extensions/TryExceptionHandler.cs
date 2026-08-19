@@ -10,7 +10,8 @@ internal static class TryExceptionHandler
             or ArgumentException
             or NullReferenceException
             or NotImplementedException
-            or NotSupportedException)
+            or NotSupportedException
+            or InvalidOperationException)
             ExceptionDispatchInfo.Capture(ex).Throw();
     }
 }

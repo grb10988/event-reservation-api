@@ -12,7 +12,7 @@ public static partial class ResultExtensions
 
         foreach (var result in results)
             if (result.IsFailure)
-                errors.AddError(result.Errors);
+                errors.AddRange(result.Errors);
 
         return errors.HasErrors
             ? Failure(errors.Errors)
@@ -38,7 +38,7 @@ public static partial class ResultExtensions
             if (result.IsSuccess)
                 values.Add(result.Value);
             else
-                errors.AddError(result.Errors);
+                errors.AddRange(result.Errors);
 
         return errors.HasErrors
             ? Failure<T[]>(errors.Errors)

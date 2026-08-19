@@ -7,6 +7,6 @@ public interface IModelBuilder<TModel>
 
 public abstract class ModelBuilder<TModel> : ResultConstructor<TModel>, IModelBuilder<TModel>
 {
-    public virtual Result<TModel> Build() => Attempt(BuildInternal);
+    public virtual Result<TModel> Build() => BuildResult(BuildInternal);
     protected abstract Result<TModel> BuildInternal();
 }

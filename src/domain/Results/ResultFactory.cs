@@ -7,7 +7,7 @@ public static class ResultFactory
     {
         if (value is null)
             throw new InvalidOperationException(
-                @"Cannot create a successful Result<{typeof(T).Name}> with a null value.
+                $@"Cannot create a successful Result<{typeof(T).Name}> with a null value.
                 This indicates a bug in the calling code, not a domain failure.");
 
         return new(value, isSuccess: true, errors: []);

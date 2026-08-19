@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace EventReservation.Domain.Construction;
 
 public abstract class ResultConstructor<TModel>
@@ -7,16 +9,18 @@ public abstract class ResultConstructor<TModel>
     protected bool HasErrors => _errors.HasErrors;
 
     private readonly ResultErrors _errors = new();
-    protected void AddError(ResultError error) => _errors.AddError(error);
+    protected void AddError(ResultError error) => _errors.Add(error);
     protected void AddErrors(IEnumerable<ResultError> errors) => _errors.AddRange(errors);
 
     protected bool Validate(bool condition, ResultError error) => _errors.Validate(condition, error);
-    protected bool Validate(string? value, ResultError error) => _errors.Validate(value, error);
+    protected bool Validate<T>([NotNullWhen(true)] T? value, ResultError error) where T : class => _errors.Validate(value, error);
+    protected bool Validate<T>([NotNullWhen(true)] T? value, ResultError error) where T : struct => _errors.Validate(value, error);
+    protected bool Validate([NotNullWhen(true)] string? value, ResultError error) => _errors.Validate(value, error);
     protected bool Validate(Guid value, ResultError error) => _errors.Validate(value, error);
 
     protected Result<TModel> ToFailureResult() => _errors.ToFailureResult<TModel>();
 
-    protected Result<TModel> Attempt(Func<Result<TModel>> operation)
+    private Result<TModel> Attempt(Func<Result<TModel>> operation)
     {
         try
         {

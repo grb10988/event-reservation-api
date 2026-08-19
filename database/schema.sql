@@ -38,7 +38,7 @@ create table seats (
     updated_at timestamptz not null default now(),
     created_by varchar(50) not null default current_user,
     updated_by varchar(50) not null default current_user,
-    unique (venue_id, section, row, number)
+    constraint ux_seats_venue_section_row_number unique (venue_id, section, row, number)
 );
 
 create table events (

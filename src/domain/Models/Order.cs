@@ -63,7 +63,7 @@ public sealed class Order
     {
         if (reservationIds is not { Count: > 0 } nonEmptyIds)
         {
-            errors.AddError(Errors.EmptyReservationIds);
+            errors.Add(Errors.EmptyReservationIds);
             return;
         }
 

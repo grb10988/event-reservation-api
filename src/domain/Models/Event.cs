@@ -104,8 +104,8 @@ public sealed class Event
     private static ResultErrors ValidateReschedule(DateTimeOffset startTime, DateTimeOffset endTime, DateTimeOffset now) =>
         ResultErrors.Collect(errors =>
         {
-            errors.AddError(ValidateStartTime(startTime, now).Errors);
-            errors.AddError(ValidateEndTime(endTime, startTime).Errors);
+            errors.AddRange(ValidateStartTime(startTime, now).Errors);
+            errors.AddRange(ValidateEndTime(endTime, startTime).Errors);
         });
 
     private static ResultErrors ValidateTicketPrice(decimal ticketPrice) => ResultErrors.Collect(errors =>
