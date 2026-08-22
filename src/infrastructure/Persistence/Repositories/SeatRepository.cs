@@ -1,5 +1,5 @@
 using Dapper;
-using EventReservation.Application.Interfaces.Repositories;
+using EventReservation.Application.Interfaces;
 using EventReservation.Domain.Models;
 
 namespace EventReservation.Infrastructure.Persistence.Repositories;

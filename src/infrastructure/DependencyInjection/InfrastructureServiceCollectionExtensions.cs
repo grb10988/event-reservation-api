@@ -1,4 +1,4 @@
-using EventReservation.Application.Interfaces.Repositories;
+using EventReservation.Application.Interfaces;
 using EventReservation.Infrastructure.Persistence;
 using EventReservation.Infrastructure.Persistence.Repositories;
 using Microsoft.Extensions.Configuration;

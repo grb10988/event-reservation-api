@@ -1,4 +1,4 @@
-namespace EventReservation.Domain.Results;
+namespace EventReservation.Domain.Results.Extensions;
 
 public static partial class ResultExtensions
 {

@@ -1,6 +1,6 @@
 using EventReservation.Domain.Models;
 
-namespace EventReservation.Application.Interfaces.Repositories;
+namespace EventReservation.Application.Interfaces;
 
 public interface IOrderRepository
 {
