@@ -12,7 +12,7 @@ public sealed class UpdateVenueCommandHandler(IVenueRepository venueRepository)
 {
     public Task<Result<UpdateVenueResult>> HandleAsync(
         UpdateVenueCommand command,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken = default)
     {
         var result = venueRepository.GetByIdAsync(command.Id, cancellationToken)
             .Bind(venue => ValidateVenue(venue, command))

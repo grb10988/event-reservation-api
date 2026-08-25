@@ -18,7 +18,9 @@ public sealed record GetReservationByIdQuery(Guid Id) : IQuery<GetReservationByI
 
 public sealed class GetReservationByIdQueryHandler(IReservationRepository reservationRepository) : IQueryHandler<GetReservationByIdQuery, GetReservationByIdResult>
 {
-    public Task<Result<GetReservationByIdResult>> HandleAsync(GetReservationByIdQuery query, CancellationToken cancellationToken = default)
+    public Task<Result<GetReservationByIdResult>> HandleAsync(
+        GetReservationByIdQuery query,
+        CancellationToken cancellationToken = default)
     {
         var result = reservationRepository.GetByIdAsync(query.Id, cancellationToken)
             .Map(r => new GetReservationByIdResult(

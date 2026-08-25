@@ -27,7 +27,9 @@ public sealed class CreateReservationCommandHandler(
     TimeProvider timeProvider)
     : ICommandHandler<CreateReservationCommand, CreateReservationResult>
 {
-    public Task<Result<CreateReservationResult>> HandleAsync(CreateReservationCommand command, CancellationToken cancellationToken = default)
+    public Task<Result<CreateReservationResult>> HandleAsync(
+        CreateReservationCommand command,
+        CancellationToken cancellationToken = default)
     {
         var result = seatRepository.TryHoldAsync(command.SeatId, cancellationToken)
             .Ensure(held => held, Errors.SeatNotAvailable)

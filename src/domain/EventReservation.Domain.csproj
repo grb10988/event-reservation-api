@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="EventReservation.Tests.Domain" />
+    <InternalsVisibleTo Include="EventReservation.Tests.Application" />
     <InternalsVisibleTo Include="EventReservation.Infrastructure" />
   </ItemGroup>
 

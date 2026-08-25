@@ -8,7 +8,7 @@ public sealed record CreateCustomerResult(Guid Id, string FirstName, string Last
 public sealed record CreateCustomerCommand(string FirstName, string LastName, string Email)
     : ICommand<CreateCustomerResult>;
 
-public sealed class CreateCustomerHandler(ICustomerRepository customerRepository)
+public sealed class CreateCustomerCommandHandler(ICustomerRepository customerRepository)
     : ICommandHandler<CreateCustomerCommand, CreateCustomerResult>
 {
     public Task<Result<CreateCustomerResult>> HandleAsync(

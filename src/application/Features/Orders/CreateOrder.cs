@@ -11,7 +11,8 @@ public sealed record CreateOrderResult(
     OrderStatus Status,
     DateTimeOffset CreatedAt);
 
-public sealed record CreateOrderCommand(Guid CustomerId, IReadOnlyCollection<Guid> ReservationIds) : ICommand<CreateOrderResult>;
+public sealed record CreateOrderCommand(Guid CustomerId, IReadOnlyCollection<Guid> ReservationIds)
+    : ICommand<CreateOrderResult>;
 
 public sealed class CreateOrderCommandHandler(
     IOrderRepository orderRepository,
@@ -19,7 +20,9 @@ public sealed class CreateOrderCommandHandler(
     TimeProvider timeProvider)
     : ICommandHandler<CreateOrderCommand, CreateOrderResult>
 {
-    public async Task<Result<CreateOrderResult>> HandleAsync(CreateOrderCommand command, CancellationToken cancellationToken = default)
+    public async Task<Result<CreateOrderResult>> HandleAsync(
+        CreateOrderCommand command,
+        CancellationToken cancellationToken = default)
     {
         var reservationChecks = await Task.WhenAll(
             command.ReservationIds.Select(id => VerifyReservationAsync(id, command.CustomerId, cancellationToken)));

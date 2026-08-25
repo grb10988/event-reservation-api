@@ -12,7 +12,8 @@ public sealed record GetOrderByConfirmationNumberResult(
     string? ConfirmationNumber,
     DateTimeOffset CreatedAt);
 
-public sealed record GetOrderByConfirmationNumberQuery(string ConfirmationNumber) : IQuery<GetOrderByConfirmationNumberResult>;
+public sealed record GetOrderByConfirmationNumberQuery(string ConfirmationNumber)
+    : IQuery<GetOrderByConfirmationNumberResult>;
 
 public sealed class GetOrderByConfirmationNumberQueryHandler(IOrderRepository orderRepository)
     : IQueryHandler<GetOrderByConfirmationNumberQuery, GetOrderByConfirmationNumberResult>
