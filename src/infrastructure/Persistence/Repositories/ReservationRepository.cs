@@ -4,55 +4,67 @@ using EventReservation.Domain.Models;
 
 namespace EventReservation.Infrastructure.Persistence.Repositories;
 
-internal sealed record ReservationRow(
-    Guid Id,
-    Guid SeatId,
-    Guid EventId,
-    Guid CustomerId,
-    decimal Price,
-    ReservationStatus Status,
-    DateTimeOffset CreatedAt,
-    DateTimeOffset HoldExpiresAt);
+internal sealed class ReservationRow
+{
+    public Guid Id { get; init; }
+    public Guid SeatId { get; init; }
+    public Guid EventId { get; init; }
+    public Guid CustomerId { get; init; }
+    public decimal Price { get; init; }
+    public ReservationStatus Status { get; init; }
+    public DateTimeOffset CreatedAt { get; init; }
+    public DateTimeOffset HoldExpiresAt { get; init; }
+}
 
 public sealed class ReservationRepository(IDbConnectionFactory connectionFactory) : IReservationRepository
 {
     private readonly IDbConnectionFactory _connectionFactory = connectionFactory;
 
-    public Task<Result<Reservation>> GetByIdAsync(Guid id, CancellationToken cancellationToken = default) =>
+    public Task<Result<Reservation>> GetByIdAsync(
+        Guid id,
+        CancellationToken cancellationToken = default) =>
         Success().MapTry(async () =>
         {
             using var connection = _connectionFactory.CreateConnection();
 
-            return await connection.QuerySingleOrDefaultAsync<ReservationRow>(
+            var rows = await connection.QueryAsync<ReservationRow>(
                 new CommandDefinition(
                     @"
-                    select
-                        id
-                        , seat_id
-                        , event_id
-                        , customer_id
-                        , price
-                        , status
-                        , created_at
-                        , hold_expires_at
-                    from reservations
-                    where id = @Id",
+                    SELECT
+                        r.id AS Id,
+                        r.seat_id AS SeatId,
+                        r.event_id AS EventId,
+                        r.customer_id AS CustomerId,
+                        r.price AS Price,
+                        r.status AS Status,
+                        r.created_at AS CreatedAt,
+                        r.hold_expires_at AS HoldExpiresAt
+                    FROM
+                        reservations AS r
+                    WHERE
+                        r.id = @Id
+                    ",
                     new { Id = id },
                     cancellationToken: cancellationToken));
-        }, ex => DatabaseExceptionMapper.Map(ex))
-        .Bind(row => row is null
+
+            return rows.ToList();
+
+        }, DatabaseExceptionMapper.Map)
+        .Bind(rows => rows.Count == 0
             ? Failure<Reservation>(RepositoryErrors.NotFound)
             : Success(Reservation.Rehydrate(
-                row.Id,
-                row.SeatId,
-                row.EventId,
-                row.CustomerId,
-                row.Price,
-                row.Status,
-                row.CreatedAt,
-                row.HoldExpiresAt)));
+                rows[0].Id,
+                rows[0].SeatId,
+                rows[0].EventId,
+                rows[0].CustomerId,
+                rows[0].Price,
+                rows[0].Status,
+                rows[0].CreatedAt,
+                rows[0].HoldExpiresAt)));
 
-    public Task<Result<IReadOnlyList<Reservation>>> GetByCustomerIdAsync(Guid customerId, CancellationToken cancellationToken = default) =>
+    public Task<Result<IReadOnlyList<Reservation>>> GetByCustomerIdAsync(
+        Guid customerId,
+        CancellationToken cancellationToken = default) =>
         Success().MapTry(async Task<IReadOnlyList<Reservation>> () =>
         {
             using var connection = _connectionFactory.CreateConnection();
@@ -60,18 +72,22 @@ public sealed class ReservationRepository(IDbConnectionFactory connectionFactory
             var rows = await connection.QueryAsync<ReservationRow>(
                 new CommandDefinition(
                     @"
-                    select
-                        id
-                        , seat_id
-                        , event_id
-                        , customer_id
-                        , price
-                        , status
-                        , created_at
-                        , hold_expires_at
-                    from reservations
-                    where customer_id = @CustomerId
-                    order by created_at desc",
+                    SELECT
+                        r.id AS Id,
+                        r.seat_id AS SeatId,
+                        r.event_id AS EventId,
+                        r.customer_id AS CustomerId,
+                        r.price AS Price,
+                        r.status AS Status,
+                        r.created_at AS CreatedAt,
+                        r.hold_expires_at AS HoldExpiresAt
+                    FROM
+                        reservations AS r
+                    WHERE
+                        r.customer_id = @CustomerId
+                    ORDER BY
+                        r.created_at DESC
+                    ",
                     new { CustomerId = customerId },
                     cancellationToken: cancellationToken));
 
@@ -84,9 +100,11 @@ public sealed class ReservationRepository(IDbConnectionFactory connectionFactory
                 r.Status,
                 r.CreatedAt,
                 r.HoldExpiresAt)).ToList();
-        }, ex => DatabaseExceptionMapper.Map(ex));
+        }, DatabaseExceptionMapper.Map);
 
-    public Task<Result<IReadOnlyList<Reservation>>> GetExpiredHoldsAsync(DateTimeOffset asOf, CancellationToken cancellationToken = default) =>
+    public Task<Result<IReadOnlyList<Reservation>>> GetExpiredHoldsAsync(
+        DateTimeOffset asOf,
+        CancellationToken cancellationToken = default) =>
         Success().MapTry(async Task<IReadOnlyList<Reservation>> () =>
         {
             using var connection = _connectionFactory.CreateConnection();
@@ -94,21 +112,24 @@ public sealed class ReservationRepository(IDbConnectionFactory connectionFactory
             var rows = await connection.QueryAsync<ReservationRow>(
                 new CommandDefinition(
                     @"
-                    select
-                        id
-                        , seat_id
-                        , event_id
-                        , customer_id
-                        , price
-                        , status
-                        , created_at
-                        , hold_expires_at
-                    from reservations
-                    where status = @HeldStatus
-                        and hold_expires_at < @AsOf",
+                    SELECT
+                        r.id AS Id,
+                        r.seat_id AS SeatId,
+                        r.event_id AS EventId,
+                        r.customer_id AS CustomerId,
+                        r.price AS Price,
+                        r.status AS Status,
+                        r.created_at AS CreatedAt,
+                        r.hold_expires_at AS HoldExpiresAt
+                    FROM
+                        reservations AS r
+                    WHERE
+                        r.status = @HeldStatus AND
+                        r.hold_expires_at < @AsOf
+                    ",
                     new
                     {
-                        HeldStatus = ReservationStatus.Held,
+                        HeldStatus = ReservationStatus.Held.ToString(),
                         AsOf = asOf
                     },
                     cancellationToken: cancellationToken));
@@ -122,18 +143,40 @@ public sealed class ReservationRepository(IDbConnectionFactory connectionFactory
                 r.Status,
                 r.CreatedAt,
                 r.HoldExpiresAt)).ToList();
-        }, ex => DatabaseExceptionMapper.Map(ex));
+
+        }, DatabaseExceptionMapper.Map);
 
     public Task<Result<Reservation>> AddAsync(Reservation reservation, CancellationToken cancellationToken = default) =>
         Success().MapTry(async () =>
         {
             using var connection = _connectionFactory.CreateConnection();
-
+        
             await connection.ExecuteAsync(
                 new CommandDefinition(
                     @"
-                    insert into reservations(id, seat_id, event_id, customer_id, price, status, created_at, hold_expires_at)
-                    values (@Id, @SeatId, @EventId, @CustomerId, @Price, @Status, @CreatedAt, @HoldExpiresAt)",
+                    INSERT INTO reservations
+                    (
+                        id,
+                        seat_id,
+                        event_id,
+                        customer_id,
+                        price,
+                        status,
+                        created_at,
+                        hold_expires_at
+                    )
+                    VALUES
+                    (
+                        @Id,
+                        @SeatId,
+                        @EventId,
+                        @CustomerId,
+                        @Price,
+                        @Status,
+                        @CreatedAt,
+                        @HoldExpiresAt
+                    )
+                    ",
                     new
                     {
                         reservation.Id,
@@ -141,14 +184,15 @@ public sealed class ReservationRepository(IDbConnectionFactory connectionFactory
                         reservation.EventId,
                         reservation.CustomerId,
                         reservation.Price,
-                        reservation.Status,
+                        Status = reservation.Status.ToString(),
                         reservation.CreatedAt,
                         reservation.HoldExpiresAt
                     },
                     cancellationToken: cancellationToken));
 
             return reservation;
-        }, ex => DatabaseExceptionMapper.Map(ex));
+
+        }, DatabaseExceptionMapper.Map);
 
     public Task<Result<bool>> TryConfirmAsync(Guid reservationId, CancellationToken cancellationToken = default) =>
         Success().MapTry(async () =>
@@ -158,20 +202,25 @@ public sealed class ReservationRepository(IDbConnectionFactory connectionFactory
             var rowsAffected = await connection.ExecuteAsync(
                 new CommandDefinition(
                     @"
-                    update reservations
-                    set status = @NewStatus
-                    where id = @Id
-                        and status in @RequiredStatuses",
+                    UPDATE
+                        reservations
+                    SET
+                        status = @NewStatus
+                    WHERE
+                        id = @Id AND
+                        status = @RequiredStatus
+                    ",
                     new
                     {
                         Id = reservationId,
-                        NewStatus = ReservationStatus.Confirmed,
-                        RequiredStatus = ReservationStatus.Held
+                        NewStatus = ReservationStatus.Confirmed.ToString(),
+                        RequiredStatus = ReservationStatus.Held.ToString()
                     },
                     cancellationToken: cancellationToken));
 
             return rowsAffected == 1;
-        }, ex => DatabaseExceptionMapper.Map(ex));
+
+        }, DatabaseExceptionMapper.Map);
 
     public Task<Result<bool>> TryCancelAsync(Guid reservationId, CancellationToken cancellationToken = default) =>
         Success().MapTry(async () =>
@@ -181,20 +230,29 @@ public sealed class ReservationRepository(IDbConnectionFactory connectionFactory
             var rowsAffected = await connection.ExecuteAsync(
                 new CommandDefinition(
                     @"
-                    update reservations
-                    set status = @NewStatus
-                    where id = @Id
-                        and status in @RequiredStatuses",
+                    UPDATE
+                        reservations
+                    SET
+                        status = @NewStatus
+                    WHERE
+                        id = @Id AND
+                        status = ANY(@RequiredStatus)
+                    ",
                     new
                     {
                         Id = reservationId,
-                        NewStatus = ReservationStatus.Cancelled,
-                        RequiredStatus = new[] { ReservationStatus.Held, ReservationStatus.Confirmed }
+                        NewStatus = ReservationStatus.Cancelled.ToString(),
+                        RequiredStatus = new[]
+                        {
+                            ReservationStatus.Held.ToString(),
+                            ReservationStatus.Confirmed.ToString()
+                        }
                     },
                     cancellationToken: cancellationToken));
 
             return rowsAffected == 1;
-        }, ex => DatabaseExceptionMapper.Map(ex));
+
+        }, DatabaseExceptionMapper.Map);
 
     public Task<Result<bool>> TryExpireAsync(Guid reservationId, CancellationToken cancellationToken = default) =>
         Success().MapTry(async () =>
@@ -204,18 +262,23 @@ public sealed class ReservationRepository(IDbConnectionFactory connectionFactory
             var rowsAffected = await connection.ExecuteAsync(
                 new CommandDefinition(
                     @"
-                    update reservations
-                    set status = @NewStatus
-                    where id = @Id
-                        and status in @RequiredStatuses",
+                    UPDATE
+                        reservations
+                    SET
+                        status = @NewStatus
+                    WHERE
+                        id = @Id AND
+                        status = @RequiredStatus
+                    ",
                     new
                     {
                         Id = reservationId,
-                        NewStatus = ReservationStatus.Expired,
-                        RequiredStatus = ReservationStatus.Held
+                        NewStatus = ReservationStatus.Expired.ToString(),
+                        RequiredStatus = ReservationStatus.Held.ToString()
                     },
                     cancellationToken: cancellationToken));
 
             return rowsAffected == 1;
-        }, ex => DatabaseExceptionMapper.Map(ex));
+
+        }, DatabaseExceptionMapper.Map);
 }

@@ -4,15 +4,17 @@ using EventReservation.Domain.Models;
 
 namespace EventReservation.Infrastructure.Persistence.Repositories;
 
-internal sealed record EventRow(
-    Guid Id,
-    Guid VenueId,
-    string Name,
-    string Description,
-    DateTimeOffset StartTime,
-    DateTimeOffset EndTime,
-    decimal TicketPrice,
-    EventStatus Status);
+internal sealed class EventRow
+{
+    public Guid Id { get; init; }
+    public Guid VenueId { get; init; }
+    public string Name { get; init; } = string.Empty;
+    public string Description { get; init; } = string.Empty;
+    public DateTimeOffset StartTime { get; init; }
+    public DateTimeOffset EndTime { get; init; }
+    public decimal TicketPrice { get; init; }
+    public EventStatus Status { get; init; }
+}
 
 public sealed class EventRepository(IDbConnectionFactory connectionFactory) : IEventRepository
 {
@@ -23,34 +25,40 @@ public sealed class EventRepository(IDbConnectionFactory connectionFactory) : IE
         {
             using var connection = _connectionFactory.CreateConnection();
 
-            return await connection.QuerySingleOrDefaultAsync<EventRow>(
+            var rows = await connection.QueryAsync<EventRow>(
                 new CommandDefinition(
                     @"
-                    select
-                        id
-                        , venue_id
-                        , name
-                        , description
-                        , start_time
-                        , end_time
-                        , ticket_price
-                        , status
-                    from events
-                    where id = @Id",
+                    SELECT
+                        e.id AS Id,
+                        e.venue_id AS VenueId,
+                        e.name AS Name,
+                        e.description AS Description,
+                        e.start_time AS StartTime,
+                        e.end_time AS EndTime,
+                        e.ticket_price AS TicketPrice,
+                        e.status AS Status
+                    FROM
+                        events AS e
+                    WHERE
+                        e.id = @Id
+                    ",
                     new { Id = id },
                     cancellationToken: cancellationToken));
-        }, ex => DatabaseExceptionMapper.Map(ex))
-        .Bind(row => row is null
+
+            return rows.ToList();
+
+        }, DatabaseExceptionMapper.Map)
+        .Bind(rows => rows.Count == 0
             ? Failure<Event>(RepositoryErrors.NotFound)
             : Success(Event.Rehydrate(
-                row.Id,
-                row.VenueId,
-                row.Name,
-                row.Description,
-                row.StartTime,
-                row.EndTime,
-                row.TicketPrice,
-                row.Status)));
+                rows[0].Id,
+                rows[0].VenueId,
+                rows[0].Name,
+                rows[0].Description,
+                rows[0].StartTime,
+                rows[0].EndTime,
+                rows[0].TicketPrice,
+                rows[0].Status)));
 
     public Task<Result<IReadOnlyList<Event>>> GetByVenueIdAsync(Guid venueId, CancellationToken cancellationToken = default) =>
         Success().MapTry(async Task<IReadOnlyList<Event>> () =>
@@ -60,18 +68,22 @@ public sealed class EventRepository(IDbConnectionFactory connectionFactory) : IE
             var rows = await connection.QueryAsync<EventRow>(
                 new CommandDefinition(
                     @"
-                    select
-                        id
-                        , venue_id
-                        , name
-                        , description
-                        , start_time
-                        , end_time
-                        , ticket_price
-                        , status
-                    from events
-                    where venue_id = @VenueId
-                    order by start_time",
+                    SELECT
+                        e.id as Id,
+                        e.venue_id as VenueId,
+                        e.name as Name,
+                        e.description as Description,
+                        e.start_time as StartTime,
+                        e.end_time as EndTime,
+                        e.ticket_price as TicketPrice,
+                        e.status as Status
+                    FROM
+                        events AS e
+                    WHERE
+                        e.venue_id = @VenueId
+                    ORDER BY
+                        e.start_time
+                    ",
                     new { VenueId = venueId },
                     cancellationToken: cancellationToken));
 
@@ -84,7 +96,8 @@ public sealed class EventRepository(IDbConnectionFactory connectionFactory) : IE
                 r.EndTime,
                 r.TicketPrice,
                 r.Status)).ToList();
-        }, ex => DatabaseExceptionMapper.Map(ex));
+
+        }, DatabaseExceptionMapper.Map);
 
     public Task<Result<Event>> AddAsync(Event @event, CancellationToken cancellationToken = default) =>
         Success().MapTry(async () =>
@@ -94,8 +107,29 @@ public sealed class EventRepository(IDbConnectionFactory connectionFactory) : IE
             await connection.ExecuteAsync(
                 new CommandDefinition(
                     @"
-                    insert into events (id, venue_id, name, description, start_time, end_time, ticket_price, status)
-                    values (@Id, @VenueId, @Name, @Description, @StartTime, @EndTime, @TicketPrice, @Status)",
+                    INSERT INTO events
+                    (
+                        id,
+                        venue_id,
+                        name,
+                        description,
+                        start_time,
+                        end_time,
+                        ticket_price,
+                        status
+                    )
+                    VALUES
+                    (
+                        @Id,
+                        @VenueId,
+                        @Name,
+                        @Description,
+                        @StartTime,
+                        @EndTime,
+                        @TicketPrice,
+                        @Status
+                    )
+                    ",
                     new
                     {
                         @event.Id,
@@ -105,12 +139,13 @@ public sealed class EventRepository(IDbConnectionFactory connectionFactory) : IE
                         @event.StartTime,
                         @event.EndTime,
                         @event.TicketPrice,
-                        @event.Status
+                        Status = @event.Status.ToString()
                     },
                     cancellationToken: cancellationToken));
 
             return @event;
-        }, ex => DatabaseExceptionMapper.Map(ex));
+
+        }, DatabaseExceptionMapper.Map);
 
     public Task<Result<Event>> UpdateAsync(Event @event, CancellationToken cancellationToken = default) =>
         Success().MapTry(async () =>
@@ -120,15 +155,18 @@ public sealed class EventRepository(IDbConnectionFactory connectionFactory) : IE
             return await connection.ExecuteAsync(
                 new CommandDefinition(
                     @"
-                    update events
-                    set
-                        name = @Name
-                        , description = @Description
-                        , start_time = @StartTime
-                        , end_time = @EndTime
-                        , ticket_price = @TicketPrice
-                        , status = @Status
-                    where id = @Id",
+                    UPDATE
+                        events
+                    SET
+                        name = @Name,
+                        description = @Description,
+                        start_time = @StartTime,
+                        end_time = @EndTime,
+                        ticket_price = @TicketPrice,
+                        status = @Status
+                    WHERE
+                        id = @Id
+                    ",
                     new
                     {
                         @event.Id,
@@ -137,10 +175,11 @@ public sealed class EventRepository(IDbConnectionFactory connectionFactory) : IE
                         @event.StartTime,
                         @event.EndTime,
                         @event.TicketPrice,
-                        @event.Status
+                        Status = @event.Status.ToString()
                     },
                     cancellationToken: cancellationToken));
-        }, ex => DatabaseExceptionMapper.Map(ex))
+
+        }, DatabaseExceptionMapper.Map)
         .Bind(rowsAffected => rowsAffected == 1
             ? Success(@event)
             : Failure<Event>(RepositoryErrors.NotFound));
@@ -153,20 +192,25 @@ public sealed class EventRepository(IDbConnectionFactory connectionFactory) : IE
             var rowsAffected = await connection.ExecuteAsync(
                 new CommandDefinition(
                     @"
-                    update events
-                    set status = @NewStatus
-                    where id = @Id
-                        and status = @RequiredSTatus",
+                    UPDATE
+                        events
+                    SET
+                        status = @NewStatus
+                    WHERE
+                        id = @Id AND
+                        status = @RequiredStatus
+                    ",
                 new
                 {
                     Id = eventId,
-                    NewStatus = EventStatus.Published,
-                    RequiredStatus = EventStatus.Draft
+                    NewStatus = EventStatus.Published.ToString(),
+                    RequiredStatus = EventStatus.Draft.ToString()
                 },
                 cancellationToken: cancellationToken));
 
             return rowsAffected == 1;
-        }, ex => DatabaseExceptionMapper.Map(ex));
+
+        }, DatabaseExceptionMapper.Map);
 
     public Task<Result<bool>> TryCancelAsync(Guid eventId, CancellationToken cancellationToken = default) =>
         Success().MapTry(async () =>
@@ -176,19 +220,27 @@ public sealed class EventRepository(IDbConnectionFactory connectionFactory) : IE
             var rowsAffected = await connection.ExecuteAsync(
                 new CommandDefinition(
                     @"
-                    update events
-                    set status = @NewStatus
-                    where id = @Id
-                        and status in @RequiredStatuses
+                    UPDATE
+                        events
+                    SET
+                        status = @NewStatus
+                    WHERE
+                        id = @Id AND
+                        status = ANY(@RequiredStatus)
                     ",
                     new
                     {
                         Id = eventId,
-                        NewStatus = EventStatus.Cancelled,
-                        RequiredStatuses = new[] { EventStatus.Draft, EventStatus.Published }
+                        NewStatus = EventStatus.Cancelled.ToString(),
+                        RequiredStatus = new[]
+                        {
+                            EventStatus.Draft.ToString(),
+                            EventStatus.Published.ToString()
+                        }
                     },
                     cancellationToken: cancellationToken));
 
             return rowsAffected == 1;
-        }, ex => DatabaseExceptionMapper.Map(ex));
+
+        }, DatabaseExceptionMapper.Map);
 }

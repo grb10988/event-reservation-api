@@ -4,7 +4,13 @@ using EventReservation.Domain.Models;
 
 namespace EventReservation.Infrastructure.Persistence.Repositories;
 
-internal sealed record VenueRow(Guid Id, string Name, string Address, int Capacity);
+internal sealed class VenueRow
+{
+    public Guid Id { get; init; }
+    public string Name { get; init; } = string.Empty;
+    public string Address { get; init; } = string.Empty;
+    public int Capacity { get; init; }
+}
 
 public sealed class VenueRepository(IDbConnectionFactory connectionFactory) : IVenueRepository
 {
@@ -15,22 +21,32 @@ public sealed class VenueRepository(IDbConnectionFactory connectionFactory) : IV
         {
             using var connection = _connectionFactory.CreateConnection();
 
-            return await connection.QuerySingleOrDefaultAsync<VenueRow>(
+            var rows = await connection.QueryAsync<VenueRow>(
                 new CommandDefinition(
                     @"
-                    select
-                        id
-                        , name
-                        , address
-                        , capacity
-                    from venues
-                    where id = @Id",
+                    SELECT
+                        v.id AS Id,
+                        v.name AS Name,
+                        v.address AS Address,
+                        v.capacity AS Capacity
+                    FROM
+                        venues AS v
+                    WHERE
+                        v.id = @Id
+                    ",
                     new { Id = id },
                     cancellationToken: cancellationToken));
-        }, ex => DatabaseExceptionMapper.Map(ex))
-        .Bind(row => row is null
+
+            return rows.ToList();
+
+        }, DatabaseExceptionMapper.Map)
+        .Bind(rows => rows.Count == 0
             ? Failure<Venue>(RepositoryErrors.NotFound)
-            : Success(Venue.Rehydrate(row.Id, row.Name, row.Address, row.Capacity)));
+            : Success(Venue.Rehydrate(
+                rows[0].Id,
+                rows[0].Name,
+                rows[0].Address,
+                rows[0].Capacity)));
 
     public Task<Result<IReadOnlyList<Venue>>> GetAllAsync(CancellationToken cancellationToken = default) =>
         Success().MapTry(async Task<IReadOnlyList<Venue>> () =>
@@ -40,16 +56,23 @@ public sealed class VenueRepository(IDbConnectionFactory connectionFactory) : IV
             var rows = await connection.QueryAsync<VenueRow>(
                 new CommandDefinition(
                     @"
-                    select
-                        id
-                        , name
-                        , address
-                        , capacity
-                    from venues",
+                    SELECT
+                        v.id AS Id,
+                        v.name AS Name,
+                        v.address AS Address,
+                        v.capacity AS Capacity
+                    FROM
+                        venues AS v
+                    ",
                     cancellationToken: cancellationToken));
 
-            return rows.Select(r => Venue.Rehydrate(r.Id, r.Name, r.Address, r.Capacity)).ToList();
-        }, ex => DatabaseExceptionMapper.Map(ex));
+            return rows.Select(r => Venue.Rehydrate(
+                r.Id,
+                r.Name,
+                r.Address,
+                r.Capacity)).ToList();
+
+        }, DatabaseExceptionMapper.Map);
 
     public Task<Result<Venue>> AddAsync(Venue venue, CancellationToken cancellationToken = default) =>
         Success().MapTry(async () =>
@@ -59,13 +82,33 @@ public sealed class VenueRepository(IDbConnectionFactory connectionFactory) : IV
             await connection.ExecuteAsync(
                 new CommandDefinition(
                     @"
-                    insert into venues (id, name, address, capacity)
-                    values (@Id, @Name, @Address, @Capacity)",
-                    new { venue.Id, venue.Name, venue.Address, venue.Capacity },
+                    INSERT INTO venues
+                    (
+                        id,
+                        name,
+                        address,
+                        capacity
+                    )
+                    VALUES
+                    (
+                        @Id,
+                        @Name,
+                        @Address,
+                        @Capacity
+                    )
+                    ",
+                    new
+                    {
+                        venue.Id,
+                        venue.Name,
+                        venue.Address,
+                        venue.Capacity
+                    },
                     cancellationToken: cancellationToken));
 
             return venue;
-        }, ex => DatabaseExceptionMapper.Map(ex));
+
+        }, DatabaseExceptionMapper.Map);
 
     public Task<Result<Venue>> UpdateAsync(Venue venue, CancellationToken cancellationToken = default) =>
         Success().MapTry(async () =>
@@ -75,15 +118,25 @@ public sealed class VenueRepository(IDbConnectionFactory connectionFactory) : IV
             return await connection.ExecuteAsync(
                 new CommandDefinition(
                     @"
-                    update venues
-                    set
-                        name = @Name
-                        , address = @Address
-                        , capacity = @Capacity
-                    where id = @Id",
-                    new { venue.Id, venue.Name, venue.Address, venue.Capacity },
+                    UPDATE
+                        venues
+                    SET
+                        name = @Name,
+                        address = @Address,
+                        capacity = @Capacity
+                    WHERE
+                        id = @Id
+                    ",
+                    new
+                    {
+                        venue.Id,
+                        venue.Name,
+                        venue.Address,
+                        venue.Capacity
+                    },
                     cancellationToken: cancellationToken));
-        }, ex => DatabaseExceptionMapper.Map(ex))
+
+        }, DatabaseExceptionMapper.Map)
         .Bind(rowsAffected => rowsAffected == 1
             ? Success(venue)
             : Failure<Venue>(RepositoryErrors.NotFound));

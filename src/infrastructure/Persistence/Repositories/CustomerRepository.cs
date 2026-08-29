@@ -4,7 +4,13 @@ using EventReservation.Domain.Models;
 
 namespace EventReservation.Infrastructure.Persistence.Repositories;
 
-internal sealed record CustomerRow(Guid Id, string FirstName, string LastName, string Email);
+internal sealed class CustomerRow
+{
+    public Guid Id { get; init; }
+    public string FirstName { get; init; } = string.Empty;
+    public string LastName { get; init; } = string.Empty;
+    public string Email { get; init; } = string.Empty;
+}
 
 public sealed class CustomerRepository(IDbConnectionFactory connectionFactory) : ICustomerRepository
 {
@@ -15,53 +21,64 @@ public sealed class CustomerRepository(IDbConnectionFactory connectionFactory) :
         {
             using var connection = _connectionFactory.CreateConnection();
 
-            return await connection.QuerySingleOrDefaultAsync<CustomerRow>(
+            var rows = await connection.QueryAsync<CustomerRow>(
                 new CommandDefinition(
                     @"
-                    select
-                        id
-                        , first_name
-                        , last_name
-                        , email
-                    from customers
-                    where id = @Id",
+                    SELECT
+                        c.id AS Id,
+                        c.first_name AS FirstName,
+                        c.last_name AS LastName,
+                        c.email AS Email
+                    FROM
+                        customers AS c
+                    WHERE
+                        c.id = @Id
+                    ",
                     new { Id = id },
                     cancellationToken: cancellationToken));
 
-        }, ex => DatabaseExceptionMapper.Map(ex))
-        .Bind(row => row is null
+            return rows.ToList();
+
+        }, DatabaseExceptionMapper.Map)
+        .Bind(rows => rows.Count == 0
             ? Failure<Customer>(RepositoryErrors.NotFound)
             : Success(Customer.Rehydrate(
-                row.Id,
-                row.FirstName,
-                row.LastName,
-                row.Email)));
+                rows[0].Id,
+                rows[0].FirstName,
+                rows[0].LastName,
+                rows[0].Email)));
 
     public Task<Result<Customer>> GetByEmailAsync(string email, CancellationToken cancellationToken = default) =>
         Success().MapTry(async () =>
         {
             using var connection = _connectionFactory.CreateConnection();
 
-            return await connection.QuerySingleOrDefaultAsync<CustomerRow>(
+            var rows = await connection.QueryAsync<CustomerRow>(
                 new CommandDefinition(
                     @"
-                    select
-                        id
-                        , first_name
-                        , last_name
-                        , email
-                    from customers
-                    where email = @Email",
+                    SELECT
+                        c.id AS Id,
+                        c.first_name AS FirstName,
+                        c.last_name AS LastName,
+                        c.email AS Email
+                    FROM
+                        customers AS c
+                    WHERE
+                        c.email = @Email
+                    ",
                     new { Email = email },
                     cancellationToken: cancellationToken));
-        }, ex => DatabaseExceptionMapper.Map(ex))
-        .Bind(row => row is null
+
+            return rows.ToList();
+
+        }, DatabaseExceptionMapper.Map)
+        .Bind(rows => rows.Count == 0
             ? Failure<Customer>(RepositoryErrors.NotFound)
             : Success(Customer.Rehydrate(
-                row.Id,
-                row.FirstName,
-                row.LastName,
-                row.Email)));
+                rows[0].Id,
+                rows[0].FirstName,
+                rows[0].LastName,
+                rows[0].Email)));
 
     public Task<Result<Customer>> AddAsync(Customer customer, CancellationToken cancellationToken = default) =>
         Success().MapTry(async () =>
@@ -71,8 +88,21 @@ public sealed class CustomerRepository(IDbConnectionFactory connectionFactory) :
             await connection.ExecuteAsync(
                 new CommandDefinition(
                     @"
-                    insert into customers(id, first_name, last_name, email)
-                    values (@Id, @FirstName, @LastName, @Email)",
+                    INSERT INTO customers
+                    (
+                        id,
+                        first_name,
+                        last_name,
+                        email
+                    )
+                    VALUES
+                    (
+                        @Id,
+                        @FirstName,
+                        @LastName,
+                        @Email
+                    )
+                    ",
                     new
                     {
                         customer.Id,
@@ -83,7 +113,8 @@ public sealed class CustomerRepository(IDbConnectionFactory connectionFactory) :
                     cancellationToken: cancellationToken));
 
             return customer;
-        }, ex => DatabaseExceptionMapper.Map(ex));
+
+        }, DatabaseExceptionMapper.Map);
 
     public Task<Result<Customer>> UpdateAsync(Customer customer, CancellationToken cancellationToken = default) =>
         Success().MapTry(async () =>
@@ -93,11 +124,15 @@ public sealed class CustomerRepository(IDbConnectionFactory connectionFactory) :
             return await connection.ExecuteAsync(
                 new CommandDefinition(
                     @"
-                    update customers
-                    set first_name = @FirstName
-                        , last_name = @LastName
-                        , email = @Email
-                    where id = @Id",
+                    UPDATE
+                        customers
+                    SET
+                        first_name = @FirstName,
+                        last_name = @LastName,
+                        email = @Email
+                    WHERE
+                        id = @Id
+                    ",
                     new
                     {
                         customer.Id,
@@ -107,7 +142,7 @@ public sealed class CustomerRepository(IDbConnectionFactory connectionFactory) :
                     },
                     cancellationToken: cancellationToken));
 
-        }, ex => DatabaseExceptionMapper.Map(ex))
+        }, DatabaseExceptionMapper.Map)
         .Bind(rowsAffected => rowsAffected == 1
             ? Success(customer)
             : Failure<Customer>(RepositoryErrors.NotFound));
