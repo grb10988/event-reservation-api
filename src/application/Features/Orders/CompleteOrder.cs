@@ -46,6 +46,6 @@ public sealed class CompleteOrderCommandHandler(
     {
         private const string Context = "COMPLETE_ORDER";
         public static ResultError OrderUpdateFailed =>
-            new(Context, "The order's reservations were confirmed, but the order itself could not be marked Completed.");
+            new(Context, "The order's reservations were confirmed, but the order itself could not be marked Completed.", ErrorCategory.Unexpected);
     }
 }

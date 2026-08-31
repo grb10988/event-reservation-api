@@ -12,6 +12,7 @@ public static class ApplicationServiceCollectionExtensions
         var assembly = typeof(ApplicationServiceCollectionExtensions).Assembly;
 
         services
+            .AddSingleton(TimeProvider.System)
             .AddScoped<IDispatcher, Dispatcher>()
             .AddScoped(typeof(IPipelineBehavior<,>), typeof(TracingBehavior<,>))
             .AddScoped(typeof(IPipelineBehavior<,>), typeof(LoggingBehavior<,>))

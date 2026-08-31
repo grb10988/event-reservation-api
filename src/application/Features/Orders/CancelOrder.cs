@@ -43,6 +43,6 @@ public sealed class CancelOrderCommandHandler(
     {
         private const string Context = "CANCEL_ORDER";
         public static ResultError OrderUpdateFailed =>
-            new(Context, "The order's reservations were cancelled, but the order itself could not be marked Cancelled.");
+            new(Context, "The order's reservations were cancelled, but the order itself could not be marked Cancelled.", ErrorCategory.Unexpected);
     }
 }

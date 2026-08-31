@@ -25,6 +25,7 @@ public sealed class ReleaseSeatCommandHandler(ISeatRepository seatRepository)
     public static class Errors
     {
         private const string Context = "RELEASE_SEAT";
-        public static ResultError SeatNotHeldOrReserved => new(Context, "The requested seat is not currently held or reserved and cannot be released.");
+        public static ResultError SeatNotHeldOrReserved =>
+            new(Context, "The requested seat is not currently held or reserved and cannot be released.", ErrorCategory.Conflict);
     }
 }

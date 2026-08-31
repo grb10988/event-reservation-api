@@ -1,6 +1,5 @@
 using EventReservation.Application.Interfaces;
 using EventReservation.Domain.Models;
-using EventReservation.Domain.Results.Extensions;
 using EventReservation.Infrastructure.Persistence;
 using EventReservation.Infrastructure.Persistence.Repositories;
 

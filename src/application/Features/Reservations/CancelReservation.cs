@@ -29,9 +29,11 @@ public sealed class CancelReservationCommandHandler(
     public static class Errors
     {
         private const string Context = "CANCEL_RESERVATION";
+        
         public static ResultError ReservationNotHeldOrConfirmed =>
-            new(Context, "The requested reservation is not currently held or confirmed and cannot be cancelled.");
+            new(Context, "The requested reservation is not currently held or confirmed and cannot be cancelled.", ErrorCategory.Conflict);
+
         public static ResultError SeatCouldNotBeReleased =>
-            new(Context, "The reservation was cancelled, but the associated seat could not be released.");
+            new(Context, "The reservation was cancelled, but the associated seat could not be released.", ErrorCategory.Conflict);
     }
 }

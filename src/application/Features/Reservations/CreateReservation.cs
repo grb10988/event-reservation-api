@@ -58,7 +58,8 @@ public sealed class CreateReservationCommandHandler(
     public static class Errors
     {
         private const string Context = "CREATE_RESERVATION";
+        
         public static ResultError SeatNotAvailable =>
-            new(Context, "The requested seat is not available to hold.");
+            new(Context, "The requested seat is not available to hold.", ErrorCategory.Conflict);
     }
 }

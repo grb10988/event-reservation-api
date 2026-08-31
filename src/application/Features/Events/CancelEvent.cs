@@ -25,6 +25,8 @@ public sealed class CancelEventCommandHandler(IEventRepository eventRepository)
     public static class Errors
     {
         private const string Context = "CANCEL_EVENT";
-        public static ResultError EventAlreadyCancelled => new(Context, "The requested event is already cancelled.");
+
+        public static ResultError EventAlreadyCancelled =>
+            new(Context, "The requested event is already cancelled.", ErrorCategory.Conflict);
     }
 }

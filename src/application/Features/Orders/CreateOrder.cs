@@ -54,6 +54,6 @@ public sealed class CreateOrderCommandHandler(
     {
         private const string Context = "CREATE_ORDER";
         public static ResultError ReservationNotOwnedOrHeld =>
-            new(Context, "One or more reservations do not belong to this customer or are not currently held.");
+            new(Context, "One or more reservations do not belong to this customer or are not currently held.", ErrorCategory.Conflict);
     }
 }

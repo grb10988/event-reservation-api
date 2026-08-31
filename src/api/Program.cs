@@ -1,14 +1,36 @@
+using EventReservation.Api.DependencyInjection;
+using EventReservation.Api.Middleware;
+using EventReservation.Application.DependencyInjection;
 using EventReservation.Infrastructure.DependencyInjection;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services
-    .AddInfrastructure(builder.Configuration);
-
 // Add services to the container.
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services
+    .AddInfrastructure(builder.Configuration)
+    .AddApplication()
+    .AddExceptionHandler<GlobalExceptionHandler>()
+    .AddProblemDetails()
+    .AddEndpointsApiExplorer()
+    .AddSwaggerGen(c =>
+    {
+        c.SwaggerDoc("v1", new Microsoft.OpenApi.OpenApiInfo
+        {
+            Version = "v1",
+            Title = "Event Reservation API",
+            Description = "An ASP.NET Core Web API for an Event Reservation application"
+        });
+    })
+    .AddCustomCors(
+        "AllowLocalhost",
+        "http://127.0.0.1:5045",
+        "http://localhost:5045",
+        "https://localhost:7123"
+    )
+    .AddHttpsRedirection(options =>
+    {
+        options.HttpsPort = 7123;
+    });
 
 var app = builder.Build();
 
@@ -16,9 +38,17 @@ var app = builder.Build();
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
-    app.UseSwaggerUI();
+    app.UseSwaggerUI(options =>
+    {
+        options.SwaggerEndpoint("/swagger/v1/swagger.json", "v1");
+        options.RoutePrefix = string.Empty;
+    });
 }
 
-app.UseHttpsRedirection();
-app.Run();
+app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
 
+app.UseCors("AllowLocalhost");
+app.UseHttpsRedirection();
+app.UseExceptionHandler();
+app.MapEndpoints();
+app.Run();

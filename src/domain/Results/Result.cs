@@ -6,12 +6,12 @@ public record Result
 {
     public bool IsSuccess { get; init; }
     public bool IsFailure => !IsSuccess;
-    public IReadOnlyCollection<ResultError> Errors { get; init; } = Array.Empty<ResultError>();
+    public IReadOnlyCollection<ResultError> Errors { get; init; } = [];
 
     protected internal Result(bool isSuccess, IReadOnlyCollection<ResultError> errors)
     {
         IsSuccess = isSuccess;
-        Errors = errors ?? Array.Empty<ResultError>();
+        Errors = errors ?? [];
     }
 }
 

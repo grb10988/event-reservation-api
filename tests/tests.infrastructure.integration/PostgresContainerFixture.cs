@@ -21,6 +21,8 @@ public static class PostgresContainerFixture
 
         try
         {
+            if (_isInitialized) return;
+
             _container = new PostgreSqlBuilder("postgres:16")
                 .WithDatabase("eventreservation")
                 .WithUsername("postgres")
@@ -28,7 +30,6 @@ public static class PostgresContainerFixture
                 .Build();
 
             await _container.StartAsync();
-
             ConnectionString = _container.GetConnectionString();
 
             var schemaSql = await File.ReadAllTextAsync(FindSchemaFilePath());
@@ -36,11 +37,11 @@ public static class PostgresContainerFixture
             await using var connection = new NpgsqlConnection(ConnectionString);
             await connection.OpenAsync();
 
-            await using var batch = new NpgsqlBatch(connection);
-
-            await using var command = connection.CreateCommand();
-            command.CommandText = schemaSql;
-            await command.ExecuteNonQueryAsync();
+            await using var batch = new NpgsqlBatch(connection)
+            {
+                BatchCommands = { new NpgsqlBatchCommand(schemaSql) }
+            };
+            await batch.ExecuteNonQueryAsync();
 
             _isInitialized = true;
         }
@@ -54,7 +55,18 @@ public static class PostgresContainerFixture
     public static async Task CleanupAsync()
     {
         if (_container is not null)
-            await _container.DisposeAsync();
+        {
+            try
+            {
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+                await _container.StopAsync(cts.Token);
+                await _container.DisposeAsync();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.WriteLine($"Cleanup failed: {ex.Message}");
+            }
+        }
     }
 
     private static string FindSchemaFilePath()

@@ -39,6 +39,6 @@ public sealed class GetOrderByConfirmationNumberQueryHandler(IOrderRepository or
     public static class Errors
     {
         private const string Context = "GET_ORDER_BY_CONFIRMATION_NUMBER";
-        public static ResultError InvalidFormat => new(Context, "The confirmation number is not in a valid format.");
+        public static ResultError InvalidFormat => new(Context, "The confirmation number is not in a valid format.", ErrorCategory.Validation);
     }
 }

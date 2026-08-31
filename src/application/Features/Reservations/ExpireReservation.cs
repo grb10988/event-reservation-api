@@ -29,9 +29,11 @@ public sealed class ExpireReservationCommandHandler(
     public static class Errors
     {
         private const string Context = "EXPIRE_RESERVATION";
+        
         public static ResultError ReservationNotHeld =>
-            new(Context, "The requested reservation is not currently held and cannot be expired.");
+            new(Context, "The requested reservation is not currently held and cannot be expired.", ErrorCategory.Conflict);
+
         public static ResultError SeatCouldNotBeReleased =>
-            new(Context, "The reservation was expired, but the associated seat could not be released.");
+            new(Context, "The reservation was expired, but the associated seat could not be released.", ErrorCategory.Conflict);
     }
 }

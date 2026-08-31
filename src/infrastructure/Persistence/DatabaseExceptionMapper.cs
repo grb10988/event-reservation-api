@@ -32,10 +32,20 @@ internal static class DatabaseExceptionMapper
     public static class Errors
     {
         private const string Context = "DATABASE";
-        public static ResultError GenericDatabaseError => new(Context, "A database error occurred. Please try again.");
-        public static ResultError DuplicateRecord => new(Context, "A record with the same unique value(s) already exists.");
-        public static ResultError ReferencedRecordMissing => new(Context, "A referenced record does not exist.");
-        public static ResultError ConcurrencyConflict => new(Context, "The record was modified by another process. Please try again.");
-        public static ResultError DatabaseUnavailable => new(Context, "The database is currently unavailable. Please try again shortly.");
+
+        public static ResultError GenericDatabaseError =>
+            new(Context, "A database error occurred. Please try again.", ErrorCategory.Unexpected);
+
+        public static ResultError DuplicateRecord =>
+            new(Context, "A record with the same unique value(s) already exists.", ErrorCategory.Conflict);
+
+        public static ResultError ReferencedRecordMissing =>
+            new(Context, "A referenced record does not exist.", ErrorCategory.Unprocessable);
+
+        public static ResultError ConcurrencyConflict =>
+            new(Context, "The record was modified by another process. Please try again.", ErrorCategory.Conflict);
+
+        public static ResultError DatabaseUnavailable =>
+            new(Context, "The database is currently unavailable. Please try again shortly.", ErrorCategory.Unavailable);
     }
 }

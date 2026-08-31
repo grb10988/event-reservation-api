@@ -16,12 +16,10 @@ public class NpgsqlConnectionFactoryTests
     {
         // Arrange - no "Default" connection string configured at all
         var configuration = Substitute.For<IConfiguration>();
-
-        // Act
-        void Act() => new NpgsqlConnectionFactory(configuration);
+        configuration.GetConnectionString("Default").Returns((string?)null);
 
         // Assert
-        Assert.ThrowsException<InvalidOperationException>(Act);
+        Assert.ThrowsException<InvalidOperationException>(() => new NpgsqlConnectionFactory(configuration));
     }
 
     [TestMethod]

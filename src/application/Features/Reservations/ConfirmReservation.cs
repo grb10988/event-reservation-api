@@ -29,9 +29,11 @@ public sealed class ConfirmReservationCommandHandler(
     public static class Errors
     {
         private const string Context = "CONFIRM_RESERVATION";
+
         public static ResultError ReservationNotHeld =>
-            new(Context, "The requested reservation is not currently held and cannot be confirmed.");
+            new(Context, "The requested reservation is not currently held and cannot be confirmed.", ErrorCategory.Conflict);
+
         public static ResultError SeatCouldNotBeReserved =>
-            new(Context, "The reservation was confirmed, but the associated seat could not be transitions to Reserved.");
+            new(Context, "The reservation was confirmed, but the associated seat could not be transitions to Reserved.", ErrorCategory.Conflict);
     }
 }

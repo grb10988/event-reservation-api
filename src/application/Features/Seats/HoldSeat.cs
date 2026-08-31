@@ -25,6 +25,7 @@ public sealed class HoldSeatCommandHandler(ISeatRepository seatRepository)
     public static class Errors
     {
         private const string Context = "HOLD_SEAT";
-        public static ResultError SeatNotAvailable => new(Context, "The requested seat is not available to hold.");
+        public static ResultError SeatNotAvailable =>
+            new(Context, "The requested seat is not available to hold.", ErrorCategory.Conflict);
     }
 }

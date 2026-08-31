@@ -1,6 +1,19 @@
 namespace EventReservation.Domain.Results;
 
-public readonly record struct ResultError(string Context, string Message)
+public enum ErrorCategory
+{
+    Validation,
+    NotFound,
+    Conflict,
+    Unavailable,
+    Unprocessable,
+    Unexpected
+}
+
+public readonly record struct ResultError(
+    string Context,
+    string Message,
+    ErrorCategory Category = ErrorCategory.Validation)
 {
     public override string ToString() => $"[{Context}] {Message}";
 }
@@ -10,7 +23,7 @@ public sealed class ResultErrors
     private List<ResultError>? _errors;
 
     public bool HasErrors => _errors is { Count: > 0 };
-    
+
     public IReadOnlyCollection<ResultError> Errors =>
         _errors != null
             ? _errors

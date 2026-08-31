@@ -25,6 +25,8 @@ public sealed class PublishEventCommandHandler(IEventRepository eventRepository)
     public static class Errors
     {
         private const string Context = "PUBLISH_EVENT";
-        public static ResultError EventNotDraft => new(Context, "The requested event is not in Draft status and cannot be published.");
+
+        public static ResultError EventNotDraft =>
+            new(Context, "The requested event is not in Draft status and cannot be published.", ErrorCategory.Conflict);
     }
 }
