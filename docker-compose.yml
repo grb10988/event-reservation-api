@@ -3,14 +3,36 @@ services:
     image: postgres:16
     container_name: eventreservation-postgres
     environment:
-      POSTGRES_USER: postgres
+      POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: eventreservation
+      POSTGRES_DB: ${POSTGRES_DB}
+      API_PASSWORD: ${API_PASSWORD}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
     ports:
       - "5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./database:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: src/api/Dockerfile
+    container_name: eventreservation-api
+    environment:
+      ASPNETCORE_ENVIRONMENT: "Container"
+      ConnectionStrings__Default: "Host=postgres;Port=5432;Database=eventreservation;Username=api;Password=${API_PASSWORD}"
+      ASPNETCORE_URLS: "http://+:8080"
+    ports:
+      - "5045:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
 
 volumes:
   postgres-data:

@@ -1,6 +1,41 @@
-@EventReservation.Api_HostAddress = http://localhost:5045
+@HostAddress = http://localhost:5045
 
-GET {{EventReservation.Api_HostAddress}}/weatherforecast/
+GET {{HostAddress}}/health
+Accept: application/json
+
+// ============================================================
+// Venues
+// ============================================================
+
+###
+// Get All Venues
+GET {{HostAddress}}/api/venues
 Accept: application/json
 
 ###
+// Get Venue by Id
+GET {{HostAddress}}/api/venues/01b8dac5-b7e8-7001-a000-000000000001
+Accept: application/json
+
+// ============================================================
+// Events
+// ============================================================
+
+###
+// Get All Events by Venue Id
+GET {{HostAddress}}/api/events?venueId=01b8dac5-b7e8-7001-a000-000000000001
+Accept: application/json
+
+// ============================================================
+// Customers
+// ============================================================
+
+###
+// Get Customer By Id
+GET {{HostAddress}}/api/customers/01b8dac5-d340-7008-a000-000000000008
+Accept: application/json
+
+###
+// Get Customer By Email
+GET {{HostAddress}}/api/customers/by-email?email=jane.doe%40example.com
+Accept: application/json

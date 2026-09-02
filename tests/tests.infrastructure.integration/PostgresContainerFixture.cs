@@ -1,4 +1,5 @@
 ﻿using DotNet.Testcontainers.Builders;
+using EventReservation.Infrastructure.Persistence;
 using Npgsql;
 using Testcontainers.PostgreSql;
 
@@ -8,47 +9,43 @@ namespace EventReservation.Tests.Infrastructure.Integration;
 public static class PostgresContainerFixture
 {
     private static PostgreSqlContainer? _container;
-    private static readonly SemaphoreSlim _semaphore = new(1, 1);
-    private static bool _isInitialized = false;
-
     public static string ConnectionString { get; private set; } = null!;
 
-    public static async Task EnsureInitializedAsync()
+    [AssemblyInitialize]
+    public static async Task AssemblyInitialize(TestContext context)
     {
-        if (_isInitialized) return;
-
-        await _semaphore.WaitAsync();
-
+        Dapper.DefaultTypeMap.MatchNamesWithUnderscores = true;
+        DapperTypeHandlerRegistration.RegisterTypeHandlers();
+        
         try
         {
-            if (_isInitialized) return;
-
             _container = new PostgreSqlBuilder("postgres:16")
-                .WithDatabase("eventreservation")
-                .WithUsername("postgres")
-                .WithPassword("postgres")
-                .Build();
+                    .WithDatabase("eventreservation")
+                    .WithUsername("postgres")
+                    .WithPassword("postgres")
+                    .Build();
 
             await _container.StartAsync();
-            ConnectionString = _container.GetConnectionString();
-
-            var schemaSql = await File.ReadAllTextAsync(FindSchemaFilePath());
-
-            await using var connection = new NpgsqlConnection(ConnectionString);
-            await connection.OpenAsync();
-
-            await using var batch = new NpgsqlBatch(connection)
-            {
-                BatchCommands = { new NpgsqlBatchCommand(schemaSql) }
-            };
-            await batch.ExecuteNonQueryAsync();
-
-            _isInitialized = true;
         }
-        finally
+        catch (DockerUnavailableException ex)
         {
-            _semaphore.Release();
+            throw new InvalidOperationException(
+                "Docker Desktop must be running to execute the Infrastructure integration tests. Start Docker Desktop and re-run the tests.", ex);
         }
+
+        ConnectionString = _container.GetConnectionString();
+
+        var schemaSql = await File.ReadAllTextAsync(FindSchemaFilePath());
+
+        schemaSql = schemaSql
+            .Replace(":'api_password'", "'test_api_password'")
+            .Replace(":'admin_password'", "'test_admin_password'");
+
+        await using var connection = new NpgsqlConnection(ConnectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = schemaSql;
+        await command.ExecuteNonQueryAsync();
     }
 
     [AssemblyCleanup]
@@ -56,16 +53,9 @@ public static class PostgresContainerFixture
     {
         if (_container is not null)
         {
-            try
-            {
-                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-                await _container.StopAsync(cts.Token);
-                await _container.DisposeAsync();
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Trace.WriteLine($"Cleanup failed: {ex.Message}");
-            }
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            await _container.StopAsync(cts.Token);
+            await _container.DisposeAsync();
         }
     }
 
@@ -73,12 +63,12 @@ public static class PostgresContainerFixture
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
 
-        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "database", "schema.sql")))
+        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "database", "scripts", "schema.sql")))
             directory = directory.Parent;
 
         if (directory is null)
-            throw new InvalidOperationException("Could not locate database/schema.sql relative to the test output directory.");
+            throw new InvalidOperationException("Could not locate database/scripts/schema.sql relative to the test output directory.");
 
-        return Path.Combine(directory.FullName, "database", "schema.sql");
+        return Path.Combine(directory.FullName, "database", "scripts", "schema.sql");
     }
 }

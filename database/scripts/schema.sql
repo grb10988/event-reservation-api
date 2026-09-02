@@ -13,8 +13,8 @@
 -- values in user secrets / your own environment, never here.
 -- ------------------------------------------------------------
 
-create role api with login password 'CHANGE_ME_api';
-create role admin with login password 'CHANGE_ME_admin';
+create role api with login password :'api_password';
+create role admin with login password :'admin_password';
 
 create table venues (
     id uuid primary key,

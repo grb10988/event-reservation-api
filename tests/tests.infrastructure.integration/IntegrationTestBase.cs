@@ -10,30 +10,20 @@ public abstract class IntegrationTestBase
     protected IDbConnectionFactory ConnectionFactory { get; private set; } = null!;
 
     [TestInitialize]
-    public async Task BaseSetupAsync()
+    public void BaseSetup()
     {
-        await PostgresContainerFixture.EnsureInitializedAsync();
-
         ConnectionFactory = new TestConnectionFactory(PostgresContainerFixture.ConnectionString);
     }
 
     [TestCleanup]
     public async Task BaseCleanupAsync()
     {
-        try
-        {
-
-            await using var connection = new NpgsqlConnection(PostgresContainerFixture.ConnectionString);
-            await connection.OpenAsync();
-            await using var command = connection.CreateCommand();
-            command.CommandTimeout = 30;
-            command.CommandText = "TRUNCATE TABLE order_reservations, orders, reservations, seats, events, customers, venues RESTART IDENTITY CASCADE;";
-            await command.ExecuteNonQueryAsync();
-        }
-        catch
-        {
-            System.Diagnostics.Trace.WriteLine("Warning: Cleanup failed. Database may be in an inconsistent State.");
-        }
+        await using var connection = new NpgsqlConnection(PostgresContainerFixture.ConnectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandTimeout = 30;
+        command.CommandText = "TRUNCATE TABLE order_reservations, orders, reservations, seats, events, customers, venues RESTART IDENTITY CASCADE;";
+        await command.ExecuteNonQueryAsync();
     }
 
     private sealed class TestConnectionFactory(string connectionString) : IDbConnectionFactory

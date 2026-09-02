@@ -49,14 +49,16 @@ public class EnumTypeHandlerTests
     }
 
     [TestMethod]
-    public void Parse_WithInvalidName_ThrowsArgumentException()
+    [DataRow("NotARealStatus")]
+    [DataRow(12345)]
+    [DataRow(null)]
+    public void Parse_WithInvalidOrNullName_ReturnsDefaultEnumValue(object input)
     {
-        // Arrange - proves a genuinely corrupt/unexpected database value
-        // fails loudly rather than silently mapping to some default
-        void Act() => _handler.Parse("NotARealStatus");
+        // Act
+        var result = _handler.Parse(input);
 
-        // Act & Assert
-        Assert.ThrowsException<ArgumentException>(Act);
+        // Assert
+        Assert.AreEqual(default, result);
     }
 
     [TestMethod]

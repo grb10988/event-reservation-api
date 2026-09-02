@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using EventReservation.Api.DependencyInjection;
 using EventReservation.Api.Middleware;
 using EventReservation.Application.DependencyInjection;
@@ -7,6 +8,10 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services
+    .Configure<Microsoft.AspNetCore.Http.Json.JsonOptions>(options =>
+    {
+        options.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
+    })
     .AddInfrastructure(builder.Configuration)
     .AddApplication()
     .AddExceptionHandler<GlobalExceptionHandler>()
@@ -26,16 +31,19 @@ builder.Services
         "http://127.0.0.1:5045",
         "http://localhost:5045",
         "https://localhost:7123"
-    )
-    .AddHttpsRedirection(options =>
+    );
+    if (!builder.Environment.IsEnvironment("Container"))
     {
-        options.HttpsPort = 7123;
-    });
+        builder.Services.AddHttpsRedirection(options =>
+        {
+            options.HttpsPort = 7123;
+        });
+    }
 
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
+if (app.Environment.IsDevelopment() || app.Environment.IsEnvironment("Container"))
 {
     app.UseSwagger();
     app.UseSwaggerUI(options =>
@@ -48,7 +56,10 @@ if (app.Environment.IsDevelopment())
 app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
 
 app.UseCors("AllowLocalhost");
-app.UseHttpsRedirection();
+
+if (!app.Environment.IsEnvironment("Container"))
+    app.UseHttpsRedirection();
+
 app.UseExceptionHandler();
 app.MapEndpoints();
 app.Run();

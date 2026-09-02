@@ -6,12 +6,14 @@ public static class EndpointExtensions
 {
     public static IEndpointRouteBuilder MapEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapVenueEndpoints();
-        app.MapSeatEndpoints();
-        app.MapEventEndpoints();
-        app.MapReservationEndpoints();
-        app.MapOrderEndpoints();
-        app.MapCustomerEndpoints();
+        var apiGroup = app.MapGroup("/api");
+
+        apiGroup.MapVenueEndpoints();
+        apiGroup.MapSeatEndpoints();
+        apiGroup.MapEventEndpoints();
+        apiGroup.MapReservationEndpoints();
+        apiGroup.MapOrderEndpoints();
+        apiGroup.MapCustomerEndpoints();
 
         return app;
     }
