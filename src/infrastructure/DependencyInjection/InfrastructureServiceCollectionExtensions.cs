@@ -8,7 +8,9 @@ namespace EventReservation.Infrastructure.DependencyInjection;
 
 public static class InfrastructureServiceCollectionExtensions
 {
-    public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
+    public static IServiceCollection AddInfrastructure(
+        this IServiceCollection services,
+        IConfiguration configuration)
     {
         Dapper.DefaultTypeMap.MatchNamesWithUnderscores = true;
 
@@ -16,7 +18,14 @@ public static class InfrastructureServiceCollectionExtensions
 
         services
             .AddSingleton<IDbConnectionFactory, NpgsqlConnectionFactory>()
+            .AddRepositories();
 
+        return services;
+    }
+
+    private static IServiceCollection AddRepositories(this IServiceCollection services)
+    {
+        services
             .AddScoped<IVenueRepository, VenueRepository>()
             .AddScoped<ISeatRepository, SeatRepository>()
             .AddScoped<IEventRepository, EventRepository>()

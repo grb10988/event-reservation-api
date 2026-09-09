@@ -4,7 +4,12 @@ using EventReservation.Api.Middleware;
 using EventReservation.Application.DependencyInjection;
 using EventReservation.Infrastructure.DependencyInjection;
 
+if (File.Exists(".env"))
+    DotNetEnv.Env.Load();
+
 var builder = WebApplication.CreateBuilder(args);
+
+var messagingAssembly = typeof(ApplicationServiceCollectionExtensions).Assembly;
 
 // Add services to the container.
 builder.Services
@@ -13,6 +18,7 @@ builder.Services
         options.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
     })
     .AddInfrastructure(builder.Configuration)
+    .AddMessaging(builder.Configuration, messagingAssembly)
     .AddApplication()
     .AddExceptionHandler<GlobalExceptionHandler>()
     .AddProblemDetails()

@@ -1,5 +1,7 @@
 using System.Reflection;
 using EventReservation.Application.Abstractions;
+using EventReservation.Application.Abstractions.DomainEvents;
+using EventReservation.Application.Abstractions.Requests;
 using EventReservation.Application.Behaviors;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -14,13 +16,36 @@ public static class ApplicationServiceCollectionExtensions
         services
             .AddSingleton(TimeProvider.System)
             .AddScoped<IDispatcher, Dispatcher>()
-            .AddScoped(typeof(IPipelineBehavior<,>), typeof(TracingBehavior<,>))
-            .AddScoped(typeof(IPipelineBehavior<,>), typeof(LoggingBehavior<,>))
-            .AddScoped(typeof(IPipelineBehavior<,>), typeof(MetricsBehavior<,>));
+            .AddRequestPipeline()
+            .AddDomainEventPipeline()
+            .AddRequestHandlers(assembly)
+            .AddDomainEventHandlers(assembly);
 
+        return services;
+    }
+
+    private static IServiceCollection AddRequestPipeline(this IServiceCollection services) =>
+        services
+            .AddScoped(typeof(IPipelineBehavior<,>), typeof(RequestTracingBehavior<,>))
+            .AddScoped(typeof(IPipelineBehavior<,>), typeof(RequestLoggingBehavior<,>))
+            .AddScoped(typeof(IPipelineBehavior<,>), typeof(RequestMetricsBehavior<,>));
+
+    private static IServiceCollection AddDomainEventPipeline(this IServiceCollection services) =>
+        services
+            .AddScoped(typeof(IDomainEventPipelineBehavior<>), typeof(DomainEventTracingBehavior<>))
+            .AddScoped(typeof(IDomainEventPipelineBehavior<>), typeof(DomainEventLoggingBehavior<>))
+            .AddScoped(typeof(IDomainEventPipelineBehavior<>), typeof(DomainEventMetricsBehavior<>));
+
+    private static IServiceCollection AddRequestHandlers(this IServiceCollection services, Assembly assembly)
+    {
         RegisterHandlers(services, assembly, typeof(ICommandHandler<,>));
         RegisterHandlers(services, assembly, typeof(IQueryHandler<,>));
+        return services;
+    }
 
+    private static IServiceCollection AddDomainEventHandlers(this IServiceCollection services, Assembly assembly)
+    {
+        RegisterHandlers(services, assembly, typeof(IDomainEventHandler<>));
         return services;
     }
 

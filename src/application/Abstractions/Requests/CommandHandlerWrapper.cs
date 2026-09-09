@@ -1,6 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 
-namespace EventReservation.Application.Abstractions;
+namespace EventReservation.Application.Abstractions.Requests;
 
 internal sealed class CommandHandlerWrapper<TCommand, TResponse> : RequestHandlerBase<TResponse>
     where TCommand : ICommand<TResponse>

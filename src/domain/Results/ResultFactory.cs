@@ -1,6 +1,6 @@
 namespace EventReservation.Domain.Results;
 
-public static class ResultFactory
+public static partial class ResultFactory
 {
     public static Result Success() => new(isSuccess: true, errors: []);
     public static Result<T> Success<T>(T value)
@@ -18,4 +18,7 @@ public static class ResultFactory
 
     public static Result Failure(IReadOnlyCollection<ResultError> errors) => new(isSuccess: false, errors: errors);
     public static Result<T> Failure<T>(IReadOnlyCollection<ResultError> errors) => new(default, isSuccess: false, errors: errors);
+
+    public static Result Failure(ResultErrors errors) => Failure(errors.Errors);
+    public static Result<T> Failure<T>(ResultErrors errors) => Failure<T>(errors.Errors);
 }

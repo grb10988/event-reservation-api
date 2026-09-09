@@ -1,4 +1,4 @@
-using EventReservation.Application.Abstractions;
+using EventReservation.Application.Abstractions.Requests;
 using EventReservation.Application.Interfaces;
 using EventReservation.Domain.Models;
 
@@ -7,7 +7,8 @@ namespace EventReservation.Application.Features.Venues;
 public sealed record CreateVenueResult(Guid Id, string Name, string Address, int Capacity);
 public sealed record CreateVenueCommand(string Name, string Address, int Capacity) : ICommand<CreateVenueResult>;
 
-public sealed class CreateVenueCommandHandler(IVenueRepository venueRepository)
+public sealed class CreateVenueCommandHandler(
+    IVenueRepository venueRepository)
     : ICommandHandler<CreateVenueCommand, CreateVenueResult>
 {
     public Task<Result<CreateVenueResult>> HandleAsync(

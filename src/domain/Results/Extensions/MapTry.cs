@@ -63,10 +63,10 @@ public static partial class ResultExtensions
     }
 
     // ============================================================
-    // Group 2: Result<T> -> Result<TNew>, map with exception safety
+    // Group 2: Result<TOld> -> Result<TNew>, map with exception safety
     // ============================================================
 
-    public static Result<TNew> MapTry<T, TNew>(this Result<T> result, Func<T, TNew> func, Func<Exception, ResultError> exceptionHandler)
+    public static Result<TNew> MapTry<TOld, TNew>(this Result<TOld> result, Func<TOld, TNew> func, Func<Exception, ResultError> exceptionHandler)
     {
         if (result.IsFailure)
             return Failure<TNew>(result.Errors);
@@ -82,7 +82,7 @@ public static partial class ResultExtensions
         }
     }
 
-    public static async Task<Result<TNew>> MapTry<T, TNew>(this Result<T> result, Func<T, Task<TNew>> func, Func<Exception, ResultError> exceptionHandler)
+    public static async Task<Result<TNew>> MapTry<TOld, TNew>(this Result<TOld> result, Func<TOld, Task<TNew>> func, Func<Exception, ResultError> exceptionHandler)
     {
         if (result.IsFailure)
             return Failure<TNew>(result.Errors);
@@ -98,13 +98,13 @@ public static partial class ResultExtensions
         }
     }
 
-    public static async Task<Result<TNew>> MapTry<T, TNew>(this Task<Result<T>> resultTask, Func<T, TNew> func, Func<Exception, ResultError> exceptionHandler)
+    public static async Task<Result<TNew>> MapTry<TOld, TNew>(this Task<Result<TOld>> resultTask, Func<TOld, TNew> func, Func<Exception, ResultError> exceptionHandler)
     {
         var result = await resultTask;
         return result.MapTry(func, exceptionHandler);
     }
 
-    public static async Task<Result<TNew>> MapTry<T, TNew>(this Task<Result<T>> resultTask, Func<T, Task<TNew>> func, Func<Exception, ResultError> exceptionHandler)
+    public static async Task<Result<TNew>> MapTry<TOld, TNew>(this Task<Result<TOld>> resultTask, Func<TOld, Task<TNew>> func, Func<Exception, ResultError> exceptionHandler)
     {
         var result = await resultTask;
 

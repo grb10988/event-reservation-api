@@ -19,6 +19,22 @@ services:
       timeout: 5s
       retries: 5
 
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: eventreservation-rabbitmq
+    environment:
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASS}
+    ports:
+      - "5672:5672"   # AMQP protocol port
+      - "15672:15672" # Management Web UI
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_listener", "5672"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
   api:
     build:
       context: .
@@ -26,12 +42,18 @@ services:
     container_name: eventreservation-api
     environment:
       ASPNETCORE_ENVIRONMENT: "Container"
-      ConnectionStrings__Default: "Host=postgres;Port=5432;Database=eventreservation;Username=api;Password=${API_PASSWORD}"
       ASPNETCORE_URLS: "http://+:8080"
+      ConnectionStrings__Default: "Host=postgres;Port=5432;Database=eventreservation;Username=api;Password=${API_PASSWORD}"
+      RabbitMQ__HostName: ${RABBITMQ_HOST}
+      RabbitMQ__Username: ${RABBITMQ_USER}
+      RabbitMQ__Password: ${RABBITMQ_PASS}
+      RabbitMQ__Port: 5672
     ports:
       - "5045:8080"
     depends_on:
       postgres:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
 
 volumes:

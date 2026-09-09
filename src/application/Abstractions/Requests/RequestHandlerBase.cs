@@ -1,4 +1,4 @@
-namespace EventReservation.Application.Abstractions;
+namespace EventReservation.Application.Abstractions.Requests;
 
 internal abstract class RequestHandlerBase<TResponse>
 {

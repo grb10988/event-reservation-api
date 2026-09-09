@@ -1,6 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 
-namespace EventReservation.Application.Abstractions;
+namespace EventReservation.Application.Abstractions.Requests;
 
 internal sealed class QueryHandlerWrapper<TQuery, TResponse> : RequestHandlerBase<TResponse>
     where TQuery : IQuery<TResponse>

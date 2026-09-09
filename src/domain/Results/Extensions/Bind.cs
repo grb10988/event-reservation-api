@@ -181,4 +181,40 @@ public static partial class ResultExtensions
 
         return await func();
     }
+
+    // ============================================================
+    // Group 6: Result<T> -> Result (continuation consumes the value)
+    // ============================================================
+
+    public static Result Bind<T>(this Result<T> result, Func<T, Result> func)
+    {
+        if (result.IsFailure)
+            return Failure(result.Errors);
+
+        return func(result.Value);
+    }
+
+    public static Task<Result> Bind<T>(this Result<T> result, Func<T, Task<Result>> func)
+    {
+        if (result.IsFailure)
+            return Task.FromResult(Failure(result.Errors));
+
+        return func(result.Value);
+    }
+
+    public static async Task<Result> Bind<T>(this Task<Result<T>> resultTask, Func<T, Result> func)
+    {
+        var result = await resultTask;
+        return result.Bind(func);
+    }
+
+    public static async Task<Result> Bind<T>(this Task<Result<T>> resultTask, Func<T, Task<Result>> func)
+    {
+        var result = await resultTask;
+
+        if (result.IsFailure)
+            return Failure(result.Errors);
+
+        return await func(result.Value);
+    }
 }

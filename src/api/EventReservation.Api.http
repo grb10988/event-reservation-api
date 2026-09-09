@@ -13,29 +13,232 @@ GET {{HostAddress}}/api/venues
 Accept: application/json
 
 ###
-// Get Venue by Id
+// Get Venue by Id (seeded)
 GET {{HostAddress}}/api/venues/01b8dac5-b7e8-7001-a000-000000000001
 Accept: application/json
+
+###
+# @name createVenue
+// Create Venue
+POST {{HostAddress}}/api/venues
+Content-Type: application/json
+
+{
+    "name": "Riverside Arena",
+    "address": "456 Oak Ave, Shelbyville",
+    "capacity": 7500
+}
+
+###
+// Update the Venue just created
+PUT {{HostAddress}}/api/venues/{{createVenue.response.body.$.id}}
+Content-Type: application/json
+
+{
+    "name": "Renamed Riverside Arena",
+    "address": "457 Oak Ave, Shelbyville",
+    "capacity": 8000
+}
+
+// ============================================================
+// Seats
+// NOTE: there is no Create Seat endpoint - seats are seeded
+// administratively (see database/seed.sql), not created via the API.
+// Every request below acts on seeded seat data.
+// ============================================================
+
+###
+// Hold a seeded seat - requires it to currently be Available
+POST {{HostAddress}}/api/seats/01b8dac5-bbd0-7002-a000-000000000002/hold
+
+###
+// Reserve the same seat - requires it to currently be Held
+POST {{HostAddress}}/api/seats/01b8dac5-bbd0-7002-a000-000000000002/reserve
+
+###
+// Release the same seat - valid from Held or Reserved
+POST {{HostAddress}}/api/seats/01b8dac5-bbd0-7002-a000-000000000002/release
 
 // ============================================================
 // Events
 // ============================================================
 
 ###
-// Get All Events by Venue Id
+// Get All Events by Venue Id (seeded)
 GET {{HostAddress}}/api/events?venueId=01b8dac5-b7e8-7001-a000-000000000001
 Accept: application/json
+
+###
+// Get Event by Id (seeded)
+GET {{HostAddress}}/api/events/01b8dac5-cb70-7006-a000-000000000006
+Accept: application/json
+
+###
+# @name createEvent
+// Create Event (tied to the seeded venue)
+// NOTE: StartTime/EndTime are static future dates - update these if
+// running this file after they've passed.
+POST {{HostAddress}}/api/events
+Content-Type: application/json
+
+{
+  "venueId": "01b8dac5-b7e8-7001-a000-000000000001",
+  "name": "Winter Gala",
+  "description": "A formal winter gala.",
+  "startTime": "2027-06-01T19:00:00Z",
+  "endTime": "2027-06-01T22:00:00Z",
+  "ticketPrice": 75.00
+}
+
+###
+// Update the Event just created
+PUT {{HostAddress}}/api/events/{{createEvent.response.body.$.id}}
+Content-Type: application/json
+
+{
+  "name": "Winter Gala (Rescheduled)",
+  "description": "A formal winter gala, rescheduled.",
+  "startTime": "2027-06-08T19:00:00Z",
+  "endTime": "2027-06-08T22:00:00Z",
+  "ticketPrice": 85.00
+}
+
+###
+// Publish the Event just created
+POST {{HostAddress}}/api/events/{{createEvent.response.body.$.id}}/publish
 
 // ============================================================
 // Customers
 // ============================================================
 
 ###
-// Get Customer By Id
+// Get Customer By Id (seeded)
 GET {{HostAddress}}/api/customers/01b8dac5-d340-7008-a000-000000000008
 Accept: application/json
 
 ###
-// Get Customer By Email
+// Get Customer By Email (seeded)
 GET {{HostAddress}}/api/customers/by-email?email=jane.doe%40example.com
 Accept: application/json
+
+###
+# @name createCustomer
+// Create Customer
+POST {{HostAddress}}/api/customers
+Content-Type: application/json
+
+{
+  "firstName": "Alex",
+  "lastName": "Rivera",
+  "email": "alex.rivera.{{$guid}}@example.com"
+}
+
+###
+// Update the Customer just created
+PUT {{HostAddress}}/api/customers/{{createCustomer.response.body.$.id}}
+Content-Type: application/json
+
+{
+  "firstName": "Alexandra",
+  "lastName": "Rivera",
+  "email": "alexandra.rivera.{{$guid}}@example.com"
+}
+
+// ============================================================
+// Full workflow: create everything needed, hold a seat, reserve
+// it, then create and complete an order - each step's IDs are
+// captured automatically from the previous response.
+// ============================================================
+
+###
+# @name workflowCustomer
+POST {{HostAddress}}/api/customers
+Content-Type: application/json
+
+{
+  "firstName": "Jordan",
+  "lastName": "Lee",
+  "email": "jordan.lee.{{$guid}}@example.com"
+}
+
+###
+# @name workflowEvent
+POST {{HostAddress}}/api/events
+Content-Type: application/json
+
+{
+  "venueId": "01b8dac5-b7e8-7001-a000-000000000001",
+  "name": "Spring Showcase",
+  "description": "A spring showcase event.",
+  "startTime": "2027-07-01T19:00:00Z",
+  "endTime": "2027-07-01T22:00:00Z",
+  "ticketPrice": 60.00
+}
+
+###
+POST {{HostAddress}}/api/events/{{workflowEvent.response.body.$.id}}/publish
+
+###
+// Hold seat B-1-1 for this workflow (kept distinct from the standalone
+// Seats section above, which uses A-1-1)
+POST {{HostAddress}}/api/seats/01b8dac5-c788-7005-a000-000000000005/hold
+
+###
+# @name workflowReservation
+POST {{HostAddress}}/api/reservations
+Content-Type: application/json
+
+{
+  "seatId": "01b8dac5-c788-7005-a000-000000000005",
+  "eventId": "{{workflowEvent.response.body.$.id}}",
+  "customerId": "{{workflowCustomer.response.body.$.id}}",
+  "price": 60.00
+}
+
+###
+# @name workflowOrder
+POST {{HostAddress}}/api/orders
+Content-Type: application/json
+
+{
+  "customerId": "{{workflowCustomer.response.body.$.id}}",
+  "reservationIds": ["{{workflowReservation.response.body.$.id}}"]
+}
+
+###
+# @name workflowCompletedOrder
+// Completing the order cascades: confirms the reservation, which in
+// turn moves the seat from Held to Reserved
+POST {{HostAddress}}/api/orders/{{workflowOrder.response.body.$.id}}/complete
+
+###
+// Look the completed order back up by its confirmation number
+GET {{HostAddress}}/api/orders/by-confirmation/{{workflowCompletedOrder.response.body.$.confirmationNumber}}
+Accept: application/json
+
+// ============================================================
+// Reservation status transitions (standalone, decoupled from the
+// order workflow above - uses seat A-1-2 to avoid interfering with
+// either the Seats section or the full workflow section)
+// ============================================================
+
+###
+POST {{HostAddress}}/api/seats/01b8dac5-bfb8-7003-a000-000000000003/hold
+
+###
+# @name standaloneReservation
+POST {{HostAddress}}/api/reservations
+Content-Type: application/json
+
+{
+  "seatId": "01b8dac5-bfb8-7003-a000-000000000003",
+  "eventId": "01b8dac5-cb70-7006-a000-000000000006",
+  "customerId": "01b8dac5-cf58-7007-a000-000000000007",
+  "price": 50.00
+}
+
+###
+POST {{HostAddress}}/api/reservations/{{standaloneReservation.response.body.$.id}}/confirm
+
+###
+POST {{HostAddress}}/api/reservations/{{standaloneReservation.response.body.$.id}}/cancel
