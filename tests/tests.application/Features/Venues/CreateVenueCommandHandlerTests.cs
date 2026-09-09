@@ -1,4 +1,3 @@
-using EventReservation.Application.Abstractions;
 using EventReservation.Application.Features.Venues;
 using EventReservation.Application.Interfaces;
 using EventReservation.Domain.Models;
@@ -10,25 +9,14 @@ namespace EventReservation.Tests.Application.Features.Venues;
 public class CreateVenueCommandHandlerTests
 {
     private IVenueRepository _venueRepository = null!;
-    private IDomainEventPipelineBehavior _eventPublisher = null!;
-    private TimeProvider _timeProvider = null!;
     private CreateVenueCommandHandler _handler = null!;
 
     [TestInitialize]
     public void Setup()
     {
         _venueRepository = Substitute.For<IVenueRepository>();
-        _eventPublisher = Substitute.For<IDomainEventPipelineBehavior>();
-        _timeProvider = Substitute.For<TimeProvider>();
 
-        _eventPublisher
-            .PublishAsync(Arg.Any<IIntegrationEvent>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(Success()));
-
-        _handler = new CreateVenueCommandHandler(
-            _venueRepository,
-            _eventPublisher,
-            _timeProvider);
+        _handler = new CreateVenueCommandHandler(_venueRepository);
     }
 
     // ============================================================

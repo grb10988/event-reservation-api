@@ -1,4 +1,5 @@
 using EventReservation.Application.Abstractions;
+using EventReservation.Application.Abstractions.Requests;
 using EventReservation.Application.Features.Reservations;
 using EventReservation.Application.Interfaces;
 using EventReservation.Domain.Models;

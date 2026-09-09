@@ -1,11 +1,12 @@
-using EventReservation.Application.Abstractions;
+using EventReservation.Application.Abstractions.Requests;
 using EventReservation.Application.Interfaces;
 using EventReservation.Domain.Models;
 
 namespace EventReservation.Application.Features.Venues;
 
 public sealed record UpdateVenueResult(Guid Id, string Name, string Address, int Capacity);
-public sealed record UpdateVenueCommand(Guid Id, string Name, string Address, int Capacity) : ICommand<UpdateVenueResult>;
+public sealed record UpdateVenueCommand(Guid Id, string Name, string Address, int Capacity)
+    : ICommand<UpdateVenueResult>;
 
 public sealed class UpdateVenueCommandHandler(IVenueRepository venueRepository)
     : ICommandHandler<UpdateVenueCommand, UpdateVenueResult>

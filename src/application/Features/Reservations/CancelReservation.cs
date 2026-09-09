@@ -1,4 +1,4 @@
-using EventReservation.Application.Abstractions;
+using EventReservation.Application.Abstractions.Requests;
 using EventReservation.Application.Interfaces;
 
 namespace EventReservation.Application.Features.Reservations;
@@ -29,7 +29,7 @@ public sealed class CancelReservationCommandHandler(
     public static class Errors
     {
         private const string Context = "CANCEL_RESERVATION";
-        
+
         public static ResultError ReservationNotHeldOrConfirmed =>
             new(Context, "The requested reservation is not currently held or confirmed and cannot be cancelled.", ErrorCategory.Conflict);
 

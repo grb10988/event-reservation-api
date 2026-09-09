@@ -1,4 +1,4 @@
-using EventReservation.Application.Abstractions;
+using EventReservation.Application.Abstractions.Requests;
 using EventReservation.Application.Interfaces;
 
 namespace EventReservation.Application.Features.Reservations;
@@ -29,7 +29,7 @@ public sealed class ExpireReservationCommandHandler(
     public static class Errors
     {
         private const string Context = "EXPIRE_RESERVATION";
-        
+
         public static ResultError ReservationNotHeld =>
             new(Context, "The requested reservation is not currently held and cannot be expired.", ErrorCategory.Conflict);
 

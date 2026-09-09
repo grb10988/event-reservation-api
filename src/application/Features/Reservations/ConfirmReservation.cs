@@ -1,4 +1,4 @@
-using EventReservation.Application.Abstractions;
+using EventReservation.Application.Abstractions.Requests;
 using EventReservation.Application.Interfaces;
 
 namespace EventReservation.Application.Features.Reservations;
