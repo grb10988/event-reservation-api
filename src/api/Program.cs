@@ -11,6 +11,12 @@ var builder = WebApplication.CreateBuilder(args);
 
 var messagingAssembly = typeof(ApplicationServiceCollectionExtensions).Assembly;
 
+builder.Configuration
+    .AddJsonFile("appsettings.rabbitmq.json", optional: false, reloadOnChange: true);
+
+builder.Logging
+    .AddObservabilityLogging(builder.Configuration);
+
 // Add services to the container.
 builder.Services
     .Configure<Microsoft.AspNetCore.Http.Json.JsonOptions>(options =>
@@ -20,6 +26,7 @@ builder.Services
     .AddInfrastructure(builder.Configuration)
     .AddMessaging(builder.Configuration, messagingAssembly)
     .AddApplication()
+    .AddObservability(builder.Configuration)
     .AddExceptionHandler<GlobalExceptionHandler>()
     .AddProblemDetails()
     .AddEndpointsApiExplorer()

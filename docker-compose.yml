@@ -48,6 +48,7 @@ services:
       RabbitMQ__Username: ${RABBITMQ_USER}
       RabbitMQ__Password: ${RABBITMQ_PASS}
       RabbitMQ__Port: 5672
+      Otlp__Endpoint: "http://otel-collector:4317"
     ports:
       - "5045:8080"
     depends_on:
@@ -55,6 +56,62 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      otel-collector:
+        condition: service_started
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: eventreservation-otel-collector
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./observability/otel-collector/config.yaml:/etc/otel-collector-config.yaml
+    ports:
+      - "4317:4317"
+      - "8889:8889"
+    depends_on:
+      - tempo
+      - loki
+
+  tempo:
+    image: grafana/tempo:latest
+    container_name: eventreservation-tempo
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes:
+      - ./observability/tempo/config.yaml:/etc/tempo.yaml
+    ports:
+      - "3200:3200"
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: eventreservation-prometheus
+    volumes:
+      - ./observability/prometheus/config.yaml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    depends_on:
+      - otel-collector
+
+  loki:
+    image: grafana/loki:latest
+    container_name: eventreservation-loki
+    command: ["-config.file=/etc/loki/config.yaml"]
+    volumes:
+      - ./observability/loki/config.yaml:/etc/loki/config.yaml
+    ports:
+      - "3100:3100"
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: eventreservation-grafana
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin"
+    volumes:
+      - ./observability/grafana/datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml
+    ports:
+      - "3000:3000"
+    depends_on:
+      - tempo
 
 volumes:
   postgres-data:

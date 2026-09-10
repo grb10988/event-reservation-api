@@ -74,19 +74,23 @@ public sealed class IntegrationEventDispatcherMetrics(IIntegrationEventDispatche
     {
         var name = typeof(TEvent).Name;
         var stopwatch = Stopwatch.StartNew();
+        var outcome = "success";
 
         try
         {
             var result = await inner.DispatchAsync(@event, cancellationToken);
+            outcome = result.IsSuccess ? "success" : "failure";
 
             Instruments.Total.Add(1,
                 new KeyValuePair<string, object?>("event", name),
-                new KeyValuePair<string, object?>("outcome", result.IsSuccess ? "success" : "failure"));
+                new KeyValuePair<string, object?>("outcome", outcome));
 
             return result;
         }
         catch (Exception ex)
         {
+            outcome = "exception";
+
             Instruments.Exceptions.Add(1,
                 new KeyValuePair<string, object?>("event", name),
                 new KeyValuePair<string, object?>("exception_type", ex.GetType().Name));
@@ -97,7 +101,8 @@ public sealed class IntegrationEventDispatcherMetrics(IIntegrationEventDispatche
         {
             Instruments.duration.Record(
                 stopwatch.Elapsed.TotalMilliseconds,
-                new KeyValuePair<string, object?>("event", name));
+                new KeyValuePair<string, object?>("event", name),
+                new KeyValuePair<string, object?>("outcome", outcome));
         }
     }
 }

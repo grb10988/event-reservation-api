@@ -13,7 +13,7 @@ public static class PipelineLogging
     {
         if (result.IsSuccess)
             logger.LogInformation(
-                "Handled {Name} successfulling in {ElapsedMilliseconds:F2}ms",
+                "Handled {Name} successfully in {ElapsedMilliseconds:F2}ms",
                 name,
                 elapsed.TotalMilliseconds);
         else

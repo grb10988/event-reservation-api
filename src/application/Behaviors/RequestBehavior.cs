@@ -80,19 +80,23 @@ public sealed class RequestMetricsBehavior<TRequest, TResponse> : IPipelineBehav
     {
         var name = typeof(TRequest).Name;
         var stopwatch = Stopwatch.StartNew();
+        var outcome = "success";
 
         try
         {
             var result = await next();
+            outcome = result.IsSuccess ? "success" : "failure";
 
             Instruments.Total.Add(1,
                 new KeyValuePair<string, object?>("request", name),
-                new KeyValuePair<string, object?>("outcome", result.IsSuccess ? "success" : "failure"));
+                new KeyValuePair<string, object?>("outcome", outcome));
 
             return result;
         }
         catch (Exception ex)
         {
+            outcome = "exception";
+
             Instruments.Exceptions.Add(1,
                 new KeyValuePair<string, object?>("request", name),
                 new KeyValuePair<string, object?>("exception_type", ex.GetType().Name));
@@ -103,7 +107,8 @@ public sealed class RequestMetricsBehavior<TRequest, TResponse> : IPipelineBehav
         {
             Instruments.Duration.Record(
                 stopwatch.Elapsed.TotalMilliseconds,
-                new KeyValuePair<string, object?>("request", name));
+                new KeyValuePair<string, object?>("request", name),
+                new KeyValuePair<string, object?>("outcome", outcome));
         }
     }
 }
