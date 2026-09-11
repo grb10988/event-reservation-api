@@ -9,7 +9,7 @@ internal static class DatabaseExceptionMapper
     {
         var error = MapCore(ex);
 
-        if (error.Category is ErrorCategory.Unexpected or ErrorCategory.Unavailable)
+        if (ShouldLog(error.Category))
             logger.LogError(
                 ex,
                 "Database operation failed and was mapped to {Category}: {Message}",
@@ -18,6 +18,10 @@ internal static class DatabaseExceptionMapper
 
         return error;
     }
+
+    internal static bool ShouldLog(ErrorCategory category) =>
+        category is ErrorCategory.Unexpected
+        or ErrorCategory.Unavailable;
 
     private static ResultError MapCore(Exception ex)
     {

@@ -2,7 +2,9 @@ using EventReservation.Application.Interfaces;
 using EventReservation.Domain.Models;
 using EventReservation.Infrastructure.Persistence;
 using EventReservation.Infrastructure.Persistence.Repositories;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using NSubstitute;
 
 namespace EventReservation.Tests.Infrastructure.Integration.Persistence.Repositories;
 
@@ -76,22 +78,32 @@ public class SeatRepositoryTests : IntegrationTestBase
     }
 
     [TestMethod]
-    public async Task AddAsync_WithDuplicateSectionRowNumberAtSameVenue_ReturnsDuplicateRecordFailure()
+    public async Task AddAsync_WithDuplicateSectionRowNumberAtSameVenue_ReturnsDuplicateRecordFailure_AndDoesNotLog()
     {
         // Arrange - this is the test unit tests could never write: a real
         // UniqueViolation, thrown by a real Postgres, translated by the
-        // real DatabaseExceptionTranslator.SqlState switch
+        // real DatabaseExceptionMapper.SqlState switch. Uses its own
+        // repository instance with an observable fake logger, rather than
+        // the class's shared _seatRepository (which uses NullLogger and
+        // can't be asserted against), since this test's whole point is
+        // verifying the logger was never called for this Conflict-category
+        // error.
+        var logger = Substitute.For<ILogger<SeatRepository>>();
+        var seatRepository = new SeatRepository(ConnectionFactory, logger);
+
         var venueId = await SeedVenueAsync();
         await SeedAvailableSeatAsync(venueId, "A", 1, 1);
         var duplicateSeat = Seat.Create(venueId, "A", 1, 1).Value;
         Assert.IsNotNull(duplicateSeat);
 
         // Act
-        var result = await _seatRepository.AddAsync(duplicateSeat);
+        var result = await seatRepository.AddAsync(duplicateSeat);
 
         // Assert
         Assert.IsTrue(result.IsFailure);
         CollectionAssert.Contains(result.Errors.ToList(), DatabaseExceptionMapper.Errors.DuplicateRecord);
+        logger.DidNotReceive().Log(
+            Arg.Any<LogLevel>(), Arg.Any<EventId>(), Arg.Any<object>(), Arg.Any<Exception>(), Arg.Any<Func<object, Exception?, string>>());
     }
 
     // ============================================================
