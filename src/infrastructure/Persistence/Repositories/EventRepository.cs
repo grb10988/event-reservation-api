@@ -1,6 +1,7 @@
 using Dapper;
 using EventReservation.Application.Interfaces;
 using EventReservation.Domain.Models;
+using Microsoft.Extensions.Logging;
 
 namespace EventReservation.Infrastructure.Persistence.Repositories;
 
@@ -16,15 +17,13 @@ internal sealed class EventRow
     public EventStatus Status { get; init; }
 }
 
-public sealed class EventRepository(IDbConnectionFactory connectionFactory) : IEventRepository
+public sealed class EventRepository(
+    IDbConnectionFactory connectionFactory,
+    ILogger<EventRepository> logger) : IEventRepository
 {
-    private readonly IDbConnectionFactory _connectionFactory = connectionFactory;
-
     public Task<Result<Event>> GetByIdAsync(Guid id, CancellationToken cancellationToken = default) =>
-        Success().MapTry(async () =>
+        RepositoryOperations.ExecuteAsync(connectionFactory, logger, async connection =>
         {
-            using var connection = _connectionFactory.CreateConnection();
-
             var rows = await connection.QueryAsync<EventRow>(
                 new CommandDefinition(
                     @"
@@ -46,8 +45,7 @@ public sealed class EventRepository(IDbConnectionFactory connectionFactory) : IE
                     cancellationToken: cancellationToken));
 
             return rows.ToList();
-
-        }, DatabaseExceptionMapper.Map)
+        })
         .Bind(rows => rows.Count == 0
             ? Failure<Event>(RepositoryErrors.NotFound)
             : Success(Event.Rehydrate(
@@ -60,11 +58,11 @@ public sealed class EventRepository(IDbConnectionFactory connectionFactory) : IE
                 rows[0].TicketPrice,
                 rows[0].Status)));
 
-    public Task<Result<IReadOnlyList<Event>>> GetByVenueIdAsync(Guid venueId, CancellationToken cancellationToken = default) =>
-        Success().MapTry(async Task<IReadOnlyList<Event>> () =>
+    public Task<Result<IReadOnlyList<Event>>> GetByVenueIdAsync(
+        Guid venueId,
+        CancellationToken cancellationToken = default) =>
+        RepositoryOperations.ExecuteAsync(connectionFactory, logger, async Task<IReadOnlyList<Event>> (connection) =>
         {
-            using var connection = _connectionFactory.CreateConnection();
-
             var rows = await connection.QueryAsync<EventRow>(
                 new CommandDefinition(
                     @"
@@ -96,14 +94,11 @@ public sealed class EventRepository(IDbConnectionFactory connectionFactory) : IE
                 r.EndTime,
                 r.TicketPrice,
                 r.Status)).ToList();
-
-        }, DatabaseExceptionMapper.Map);
+        });
 
     public Task<Result<Event>> AddAsync(Event @event, CancellationToken cancellationToken = default) =>
-        Success().MapTry(async () =>
+        RepositoryOperations.ExecuteAsync(connectionFactory, logger, async connection =>
         {
-            using var connection = _connectionFactory.CreateConnection();
-
             await connection.ExecuteAsync(
                 new CommandDefinition(
                     @"
@@ -144,14 +139,11 @@ public sealed class EventRepository(IDbConnectionFactory connectionFactory) : IE
                     cancellationToken: cancellationToken));
 
             return @event;
-
-        }, DatabaseExceptionMapper.Map);
+        });
 
     public Task<Result<Event>> UpdateAsync(Event @event, CancellationToken cancellationToken = default) =>
-        Success().MapTry(async () =>
+        RepositoryOperations.ExecuteAsync(connectionFactory, logger, async connection =>
         {
-            using var connection = _connectionFactory.CreateConnection();
-
             return await connection.ExecuteAsync(
                 new CommandDefinition(
                     @"
@@ -178,17 +170,14 @@ public sealed class EventRepository(IDbConnectionFactory connectionFactory) : IE
                         Status = @event.Status.ToString()
                     },
                     cancellationToken: cancellationToken));
-
-        }, DatabaseExceptionMapper.Map)
+        })
         .Bind(rowsAffected => rowsAffected == 1
             ? Success(@event)
             : Failure<Event>(RepositoryErrors.NotFound));
 
     public Task<Result<bool>> TryPublishAsync(Guid eventId, CancellationToken cancellationToken = default) =>
-        Success().MapTry(async () =>
+        RepositoryOperations.ExecuteAsync(connectionFactory, logger, async connection =>
         {
-            using var connection = _connectionFactory.CreateConnection();
-
             var rowsAffected = await connection.ExecuteAsync(
                 new CommandDefinition(
                     @"
@@ -209,14 +198,11 @@ public sealed class EventRepository(IDbConnectionFactory connectionFactory) : IE
                 cancellationToken: cancellationToken));
 
             return rowsAffected == 1;
-
-        }, DatabaseExceptionMapper.Map);
+        });
 
     public Task<Result<bool>> TryCancelAsync(Guid eventId, CancellationToken cancellationToken = default) =>
-        Success().MapTry(async () =>
+        RepositoryOperations.ExecuteAsync(connectionFactory, logger, async connection =>
         {
-            using var connection = _connectionFactory.CreateConnection();
-
             var rowsAffected = await connection.ExecuteAsync(
                 new CommandDefinition(
                     @"
@@ -241,6 +227,5 @@ public sealed class EventRepository(IDbConnectionFactory connectionFactory) : IE
                     cancellationToken: cancellationToken));
 
             return rowsAffected == 1;
-
-        }, DatabaseExceptionMapper.Map);
+        });
 }

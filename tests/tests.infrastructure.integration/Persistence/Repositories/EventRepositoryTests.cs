@@ -1,6 +1,7 @@
 using EventReservation.Application.Interfaces;
 using EventReservation.Domain.Models;
 using EventReservation.Infrastructure.Persistence.Repositories;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 
 namespace EventReservation.Tests.Infrastructure.Integration.Persistence.Repositories;
@@ -17,8 +18,8 @@ public class EventRepositoryTests : IntegrationTestBase
     [TestInitialize]
     public void Setup()
     {
-        _venueRepository = new VenueRepository(ConnectionFactory);
-        _eventRepository = new EventRepository(ConnectionFactory);
+        _venueRepository = new VenueRepository(ConnectionFactory, NullLogger<VenueRepository>.Instance);
+        _eventRepository = new EventRepository(ConnectionFactory, NullLogger<EventRepository>.Instance);
         _timeProvider = new FakeTimeProvider(Now);
     }
 

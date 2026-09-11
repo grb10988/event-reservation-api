@@ -1,6 +1,7 @@
 using Dapper;
 using EventReservation.Application.Interfaces;
 using EventReservation.Domain.Models;
+using Microsoft.Extensions.Logging;
 
 namespace EventReservation.Infrastructure.Persistence.Repositories;
 
@@ -12,15 +13,13 @@ internal sealed class CustomerRow
     public string Email { get; init; } = string.Empty;
 }
 
-public sealed class CustomerRepository(IDbConnectionFactory connectionFactory) : ICustomerRepository
+public sealed class CustomerRepository(
+    IDbConnectionFactory connectionFactory,
+    ILogger<CustomerRepository> logger) : ICustomerRepository
 {
-    private readonly IDbConnectionFactory _connectionFactory = connectionFactory;
-
     public Task<Result<Customer>> GetByIdAsync(Guid id, CancellationToken cancellationToken = default) =>
-        Success().MapTry(async () =>
+        RepositoryOperations.ExecuteAsync(connectionFactory, logger, async connection =>
         {
-            using var connection = _connectionFactory.CreateConnection();
-
             var rows = await connection.QueryAsync<CustomerRow>(
                 new CommandDefinition(
                     @"
@@ -38,8 +37,7 @@ public sealed class CustomerRepository(IDbConnectionFactory connectionFactory) :
                     cancellationToken: cancellationToken));
 
             return rows.ToList();
-
-        }, DatabaseExceptionMapper.Map)
+        })
         .Bind(rows => rows.Count == 0
             ? Failure<Customer>(RepositoryErrors.NotFound)
             : Success(Customer.Rehydrate(
@@ -49,10 +47,8 @@ public sealed class CustomerRepository(IDbConnectionFactory connectionFactory) :
                 rows[0].Email)));
 
     public Task<Result<Customer>> GetByEmailAsync(string email, CancellationToken cancellationToken = default) =>
-        Success().MapTry(async () =>
+        RepositoryOperations.ExecuteAsync(connectionFactory, logger, async connection =>
         {
-            using var connection = _connectionFactory.CreateConnection();
-
             var rows = await connection.QueryAsync<CustomerRow>(
                 new CommandDefinition(
                     @"
@@ -70,8 +66,7 @@ public sealed class CustomerRepository(IDbConnectionFactory connectionFactory) :
                     cancellationToken: cancellationToken));
 
             return rows.ToList();
-
-        }, DatabaseExceptionMapper.Map)
+        })
         .Bind(rows => rows.Count == 0
             ? Failure<Customer>(RepositoryErrors.NotFound)
             : Success(Customer.Rehydrate(
@@ -81,10 +76,8 @@ public sealed class CustomerRepository(IDbConnectionFactory connectionFactory) :
                 rows[0].Email)));
 
     public Task<Result<Customer>> AddAsync(Customer customer, CancellationToken cancellationToken = default) =>
-        Success().MapTry(async () =>
+        RepositoryOperations.ExecuteAsync(connectionFactory, logger, async connection =>
         {
-            using var connection = _connectionFactory.CreateConnection();
-
             await connection.ExecuteAsync(
                 new CommandDefinition(
                     @"
@@ -113,14 +106,11 @@ public sealed class CustomerRepository(IDbConnectionFactory connectionFactory) :
                     cancellationToken: cancellationToken));
 
             return customer;
-
-        }, DatabaseExceptionMapper.Map);
+        });
 
     public Task<Result<Customer>> UpdateAsync(Customer customer, CancellationToken cancellationToken = default) =>
-        Success().MapTry(async () =>
+        RepositoryOperations.ExecuteAsync(connectionFactory, logger, async connection =>
         {
-            using var connection = _connectionFactory.CreateConnection();
-
             return await connection.ExecuteAsync(
                 new CommandDefinition(
                     @"
@@ -141,8 +131,7 @@ public sealed class CustomerRepository(IDbConnectionFactory connectionFactory) :
                         customer.Email
                     },
                     cancellationToken: cancellationToken));
-
-        }, DatabaseExceptionMapper.Map)
+        })
         .Bind(rowsAffected => rowsAffected == 1
             ? Success(customer)
             : Failure<Customer>(RepositoryErrors.NotFound));

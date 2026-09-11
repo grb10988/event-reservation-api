@@ -63,6 +63,7 @@ public static class ObservabilityServiceCollectionExtensions
             .AddMeter("EventReservation.Application.IntegrationEvents.Consumers")
             .AddAspNetCoreInstrumentation()
             .AddNpgsqlInstrumentation()
+            .SetExemplarFilter(ExemplarFilterType.TraceBased)
             .AddOtlpExporter(otlp =>
             {
                 otlp.Endpoint = new Uri(configuration["otlp:Endpoint"] ?? DefaultOtlpEndpoint);

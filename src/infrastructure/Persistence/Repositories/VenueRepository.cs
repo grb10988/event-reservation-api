@@ -1,6 +1,7 @@
 using Dapper;
 using EventReservation.Application.Interfaces;
 using EventReservation.Domain.Models;
+using Microsoft.Extensions.Logging;
 
 namespace EventReservation.Infrastructure.Persistence.Repositories;
 
@@ -12,15 +13,13 @@ internal sealed class VenueRow
     public int Capacity { get; init; }
 }
 
-public sealed class VenueRepository(IDbConnectionFactory connectionFactory) : IVenueRepository
+public sealed class VenueRepository(
+    IDbConnectionFactory connectionFactory,
+    ILogger<VenueRepository> logger) : IVenueRepository
 {
-    private readonly IDbConnectionFactory _connectionFactory = connectionFactory;
-
     public Task<Result<Venue>> GetByIdAsync(Guid id, CancellationToken cancellationToken) =>
-        Success().MapTry(async () =>
+        RepositoryOperations.ExecuteAsync(connectionFactory, logger, async connection =>
         {
-            using var connection = _connectionFactory.CreateConnection();
-
             var rows = await connection.QueryAsync<VenueRow>(
                 new CommandDefinition(
                     @"
@@ -38,8 +37,7 @@ public sealed class VenueRepository(IDbConnectionFactory connectionFactory) : IV
                     cancellationToken: cancellationToken));
 
             return rows.ToList();
-
-        }, DatabaseExceptionMapper.Map)
+        })
         .Bind(rows => rows.Count == 0
             ? Failure<Venue>(RepositoryErrors.NotFound)
             : Success(Venue.Rehydrate(
@@ -49,10 +47,8 @@ public sealed class VenueRepository(IDbConnectionFactory connectionFactory) : IV
                 rows[0].Capacity)));
 
     public Task<Result<IReadOnlyList<Venue>>> GetAllAsync(CancellationToken cancellationToken = default) =>
-        Success().MapTry(async Task<IReadOnlyList<Venue>> () =>
+        RepositoryOperations.ExecuteAsync(connectionFactory, logger, async Task<IReadOnlyList<Venue>> (connection) =>
         {
-            using var connection = _connectionFactory.CreateConnection();
-
             var rows = await connection.QueryAsync<VenueRow>(
                 new CommandDefinition(
                     @"
@@ -71,14 +67,11 @@ public sealed class VenueRepository(IDbConnectionFactory connectionFactory) : IV
                 r.Name,
                 r.Address,
                 r.Capacity)).ToList();
-
-        }, DatabaseExceptionMapper.Map);
+        });
 
     public Task<Result<Venue>> AddAsync(Venue venue, CancellationToken cancellationToken = default) =>
-        Success().MapTry(async () =>
+        RepositoryOperations.ExecuteAsync(connectionFactory, logger, async connection =>
         {
-            using var connection = _connectionFactory.CreateConnection();
-
             await connection.ExecuteAsync(
                 new CommandDefinition(
                     @"
@@ -107,14 +100,11 @@ public sealed class VenueRepository(IDbConnectionFactory connectionFactory) : IV
                     cancellationToken: cancellationToken));
 
             return venue;
-
-        }, DatabaseExceptionMapper.Map);
+        });
 
     public Task<Result<Venue>> UpdateAsync(Venue venue, CancellationToken cancellationToken = default) =>
-        Success().MapTry(async () =>
+        RepositoryOperations.ExecuteAsync(connectionFactory, logger, async connection =>
         {
-            using var connection = _connectionFactory.CreateConnection();
-
             return await connection.ExecuteAsync(
                 new CommandDefinition(
                     @"
@@ -135,8 +125,7 @@ public sealed class VenueRepository(IDbConnectionFactory connectionFactory) : IV
                         venue.Capacity
                     },
                     cancellationToken: cancellationToken));
-
-        }, DatabaseExceptionMapper.Map)
+        })
         .Bind(rowsAffected => rowsAffected == 1
             ? Success(venue)
             : Failure<Venue>(RepositoryErrors.NotFound));

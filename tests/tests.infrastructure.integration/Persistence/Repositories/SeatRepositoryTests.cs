@@ -2,6 +2,7 @@ using EventReservation.Application.Interfaces;
 using EventReservation.Domain.Models;
 using EventReservation.Infrastructure.Persistence;
 using EventReservation.Infrastructure.Persistence.Repositories;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace EventReservation.Tests.Infrastructure.Integration.Persistence.Repositories;
 
@@ -14,8 +15,8 @@ public class SeatRepositoryTests : IntegrationTestBase
     [TestInitialize]
     public void Setup()
     {
-        _seatRepository = new SeatRepository(ConnectionFactory);
-        _venueRepository = new VenueRepository(ConnectionFactory);
+        _seatRepository = new SeatRepository(ConnectionFactory, NullLogger<SeatRepository>.Instance);
+        _venueRepository = new VenueRepository(ConnectionFactory, NullLogger<VenueRepository>.Instance);
     }
 
     private async Task<Guid> SeedVenueAsync()

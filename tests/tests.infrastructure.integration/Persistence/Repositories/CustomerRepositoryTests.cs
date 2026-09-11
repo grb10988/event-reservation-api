@@ -2,6 +2,7 @@ using EventReservation.Application.Interfaces;
 using EventReservation.Domain.Models;
 using EventReservation.Infrastructure.Persistence;
 using EventReservation.Infrastructure.Persistence.Repositories;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace EventReservation.Tests.Infrastructure.Integration.Persistence.Repositories;
 
@@ -13,7 +14,7 @@ public class CustomerRepositoryTests : IntegrationTestBase
     [TestInitialize]
     public void Setup()
     {
-        _customerRepository = new CustomerRepository(ConnectionFactory);
+        _customerRepository = new CustomerRepository(ConnectionFactory, NullLogger<CustomerRepository>.Instance);
     }
 
     private async Task<Customer> SeedCustomerAsync(string email = "jane.doe@example.com")

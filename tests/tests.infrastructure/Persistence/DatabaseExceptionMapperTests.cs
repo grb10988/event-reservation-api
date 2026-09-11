@@ -1,4 +1,5 @@
 using EventReservation.Infrastructure.Persistence;
+using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
 
 namespace EventReservation.Tests.Infrastructure.Persistence;
@@ -6,6 +7,9 @@ namespace EventReservation.Tests.Infrastructure.Persistence;
 [TestClass]
 public class DatabaseExceptionMapperTests
 {
+    private static readonly NullLogger<DatabaseExceptionMapperTests> Logger =
+        NullLogger<DatabaseExceptionMapperTests>.Instance;
+
     // ============================================================
     // Map
     // ============================================================
@@ -19,7 +23,7 @@ public class DatabaseExceptionMapperTests
         var exception = new NpgsqlException("Connection refused");
 
         // Act
-        var error = DatabaseExceptionMapper.Map(exception);
+        var error = DatabaseExceptionMapper.Map(exception, Logger);
 
         // Assert
         Assert.AreEqual(DatabaseExceptionMapper.Errors.DatabaseUnavailable, error);
@@ -32,7 +36,7 @@ public class DatabaseExceptionMapperTests
         var exception = new InvalidCastException("unrelated");
 
         // Act
-        var error = DatabaseExceptionMapper.Map(exception);
+        var error = DatabaseExceptionMapper.Map(exception, Logger);
 
         // Assert
         Assert.AreEqual(DatabaseExceptionMapper.Errors.GenericDatabaseError, error);

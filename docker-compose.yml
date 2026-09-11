@@ -84,6 +84,9 @@ services:
   prometheus:
     image: prom/prometheus:latest
     container_name: eventreservation-prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--enable-feature=exemplar-storage"
     volumes:
       - ./observability/prometheus/config.yaml:/etc/prometheus/prometheus.yml
     ports:

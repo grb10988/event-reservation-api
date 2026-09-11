@@ -1,10 +1,25 @@
+using Microsoft.Extensions.Logging;
 using Npgsql;
 
 namespace EventReservation.Infrastructure.Persistence;
 
 internal static class DatabaseExceptionMapper
 {
-    public static ResultError Map(Exception ex)
+    public static ResultError Map(Exception ex, ILogger logger)
+    {
+        var error = MapCore(ex);
+
+        if (error.Category is ErrorCategory.Unexpected or ErrorCategory.Unavailable)
+            logger.LogError(
+                ex,
+                "Database operation failed and was mapped to {Category}: {Message}",
+                error.Category,
+                error.Message);
+
+        return error;
+    }
+
+    private static ResultError MapCore(Exception ex)
     {
         if (ex is PostgresException pgEx)
         {

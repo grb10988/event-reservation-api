@@ -2,6 +2,7 @@ using EventReservation.Application.Interfaces;
 using EventReservation.Domain.Models;
 using EventReservation.Infrastructure.Persistence;
 using EventReservation.Infrastructure.Persistence.Repositories;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace EventReservation.Tests.Infrastructure.Integration.Persistence.Repositories;
 
@@ -13,7 +14,7 @@ public class VenueRepositoryTests : IntegrationTestBase
     [TestInitialize]
     public void Setup()
     {
-        _venueRepository = new VenueRepository(ConnectionFactory);
+        _venueRepository = new VenueRepository(ConnectionFactory, NullLogger<VenueRepository>.Instance);
     }
 
     private async Task<Venue> SeedVenueAsync(string name = "City Amphitheater", string address = "123 Main St, Springfield", int capacity = 5000)

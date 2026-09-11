@@ -1,6 +1,7 @@
 using Dapper;
 using EventReservation.Application.Interfaces;
 using EventReservation.Domain.Models;
+using Microsoft.Extensions.Logging;
 
 namespace EventReservation.Infrastructure.Persistence.Repositories;
 
@@ -16,17 +17,15 @@ internal sealed class ReservationRow
     public DateTimeOffset HoldExpiresAt { get; init; }
 }
 
-public sealed class ReservationRepository(IDbConnectionFactory connectionFactory) : IReservationRepository
+public sealed class ReservationRepository(
+    IDbConnectionFactory connectionFactory,
+    ILogger<ReservationRepository> logger) : IReservationRepository
 {
-    private readonly IDbConnectionFactory _connectionFactory = connectionFactory;
-
     public Task<Result<Reservation>> GetByIdAsync(
         Guid id,
         CancellationToken cancellationToken = default) =>
-        Success().MapTry(async () =>
+        RepositoryOperations.ExecuteAsync(connectionFactory, logger, async connection =>
         {
-            using var connection = _connectionFactory.CreateConnection();
-
             var rows = await connection.QueryAsync<ReservationRow>(
                 new CommandDefinition(
                     @"
@@ -48,8 +47,7 @@ public sealed class ReservationRepository(IDbConnectionFactory connectionFactory
                     cancellationToken: cancellationToken));
 
             return rows.ToList();
-
-        }, DatabaseExceptionMapper.Map)
+        })
         .Bind(rows => rows.Count == 0
             ? Failure<Reservation>(RepositoryErrors.NotFound)
             : Success(Reservation.Rehydrate(
@@ -65,10 +63,11 @@ public sealed class ReservationRepository(IDbConnectionFactory connectionFactory
     public Task<Result<IReadOnlyList<Reservation>>> GetByCustomerIdAsync(
         Guid customerId,
         CancellationToken cancellationToken = default) =>
-        Success().MapTry(async Task<IReadOnlyList<Reservation>> () =>
+        RepositoryOperations.ExecuteAsync(
+            connectionFactory,
+            logger,
+            async Task<IReadOnlyList<Reservation>> (connection) =>
         {
-            using var connection = _connectionFactory.CreateConnection();
-
             var rows = await connection.QueryAsync<ReservationRow>(
                 new CommandDefinition(
                     @"
@@ -100,15 +99,16 @@ public sealed class ReservationRepository(IDbConnectionFactory connectionFactory
                 r.Status,
                 r.CreatedAt,
                 r.HoldExpiresAt)).ToList();
-        }, DatabaseExceptionMapper.Map);
+        });
 
     public Task<Result<IReadOnlyList<Reservation>>> GetExpiredHoldsAsync(
         DateTimeOffset asOf,
         CancellationToken cancellationToken = default) =>
-        Success().MapTry(async Task<IReadOnlyList<Reservation>> () =>
+        RepositoryOperations.ExecuteAsync(
+            connectionFactory,
+            logger,
+            async Task<IReadOnlyList<Reservation>> (connection) =>
         {
-            using var connection = _connectionFactory.CreateConnection();
-
             var rows = await connection.QueryAsync<ReservationRow>(
                 new CommandDefinition(
                     @"
@@ -143,14 +143,11 @@ public sealed class ReservationRepository(IDbConnectionFactory connectionFactory
                 r.Status,
                 r.CreatedAt,
                 r.HoldExpiresAt)).ToList();
-
-        }, DatabaseExceptionMapper.Map);
+        });
 
     public Task<Result<Reservation>> AddAsync(Reservation reservation, CancellationToken cancellationToken = default) =>
-        Success().MapTry(async () =>
+        RepositoryOperations.ExecuteAsync(connectionFactory, logger, async connection =>
         {
-            using var connection = _connectionFactory.CreateConnection();
-        
             await connection.ExecuteAsync(
                 new CommandDefinition(
                     @"
@@ -191,14 +188,11 @@ public sealed class ReservationRepository(IDbConnectionFactory connectionFactory
                     cancellationToken: cancellationToken));
 
             return reservation;
-
-        }, DatabaseExceptionMapper.Map);
+        });
 
     public Task<Result<bool>> TryConfirmAsync(Guid reservationId, CancellationToken cancellationToken = default) =>
-        Success().MapTry(async () =>
+        RepositoryOperations.ExecuteAsync(connectionFactory, logger, async connection =>
         {
-            using var connection = _connectionFactory.CreateConnection();
-
             var rowsAffected = await connection.ExecuteAsync(
                 new CommandDefinition(
                     @"
@@ -219,14 +213,11 @@ public sealed class ReservationRepository(IDbConnectionFactory connectionFactory
                     cancellationToken: cancellationToken));
 
             return rowsAffected == 1;
-
-        }, DatabaseExceptionMapper.Map);
+        });
 
     public Task<Result<bool>> TryCancelAsync(Guid reservationId, CancellationToken cancellationToken = default) =>
-        Success().MapTry(async () =>
+        RepositoryOperations.ExecuteAsync(connectionFactory, logger, async connection =>
         {
-            using var connection = _connectionFactory.CreateConnection();
-
             var rowsAffected = await connection.ExecuteAsync(
                 new CommandDefinition(
                     @"
@@ -251,14 +242,11 @@ public sealed class ReservationRepository(IDbConnectionFactory connectionFactory
                     cancellationToken: cancellationToken));
 
             return rowsAffected == 1;
-
-        }, DatabaseExceptionMapper.Map);
+        });
 
     public Task<Result<bool>> TryExpireAsync(Guid reservationId, CancellationToken cancellationToken = default) =>
-        Success().MapTry(async () =>
+        RepositoryOperations.ExecuteAsync(connectionFactory, logger, async connection =>
         {
-            using var connection = _connectionFactory.CreateConnection();
-
             var rowsAffected = await connection.ExecuteAsync(
                 new CommandDefinition(
                     @"
@@ -279,6 +267,5 @@ public sealed class ReservationRepository(IDbConnectionFactory connectionFactory
                     cancellationToken: cancellationToken));
 
             return rowsAffected == 1;
-
-        }, DatabaseExceptionMapper.Map);
+        });
 }

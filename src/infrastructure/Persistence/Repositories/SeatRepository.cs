@@ -1,6 +1,7 @@
 using Dapper;
 using EventReservation.Application.Interfaces;
 using EventReservation.Domain.Models;
+using Microsoft.Extensions.Logging;
 
 namespace EventReservation.Infrastructure.Persistence.Repositories;
 
@@ -14,15 +15,13 @@ internal sealed class SeatRow
     public SeatStatus Status { get; init; }
 }
 
-public sealed class SeatRepository(IDbConnectionFactory connectionFactory) : ISeatRepository
+public sealed class SeatRepository(
+    IDbConnectionFactory connectionFactory,
+    ILogger<SeatRepository> logger) : ISeatRepository
 {
-    private readonly IDbConnectionFactory _connectionFactory = connectionFactory;
-
     public Task<Result<Seat>> GetByIdAsync(Guid id, CancellationToken cancellationToken = default) =>
-        Success().MapTry(async () =>
+        RepositoryOperations.ExecuteAsync(connectionFactory, logger, async connection =>
         {
-            using var connection = _connectionFactory.CreateConnection();
-
             var rows = await connection.QueryAsync<SeatRow>(
                 new CommandDefinition(
                     @"
@@ -42,8 +41,7 @@ public sealed class SeatRepository(IDbConnectionFactory connectionFactory) : ISe
                     cancellationToken: cancellationToken));
 
             return rows.ToList();
-
-        }, DatabaseExceptionMapper.Map)
+        })
         .Bind(rows => rows.Count == 0
             ? Failure<Seat>(RepositoryErrors.NotFound)
             : Success(Seat.Rehydrate(
@@ -54,11 +52,11 @@ public sealed class SeatRepository(IDbConnectionFactory connectionFactory) : ISe
                 rows[0].Number,
                 rows[0].Status)));
 
-    public Task<Result<IReadOnlyList<Seat>>> GetByVenueIdAsync(Guid venueId, CancellationToken cancellationToken = default) =>
-        Success().MapTry(async Task<IReadOnlyList<Seat>> () =>
+    public Task<Result<IReadOnlyList<Seat>>> GetByVenueIdAsync(
+        Guid venueId,
+        CancellationToken cancellationToken = default) =>
+        RepositoryOperations.ExecuteAsync(connectionFactory, logger, async Task<IReadOnlyList<Seat>> (connection) =>
         {
-            using var connection = _connectionFactory.CreateConnection();
-
             var rows = await connection.QueryAsync<SeatRow>(
                 new CommandDefinition(
                     @"
@@ -88,14 +86,11 @@ public sealed class SeatRepository(IDbConnectionFactory connectionFactory) : ISe
                 r.Row,
                 r.Number,
                 r.Status)).ToList();
-
-        }, DatabaseExceptionMapper.Map);
+        });
 
     public Task<Result<Seat>> AddAsync(Seat seat, CancellationToken cancellationToken = default) =>
-        Success().MapTry(async () =>
+        RepositoryOperations.ExecuteAsync(connectionFactory, logger, async connection =>
         {
-            using var connection = _connectionFactory.CreateConnection();
-
             await connection.ExecuteAsync(
                 new CommandDefinition(
                     @"
@@ -130,14 +125,11 @@ public sealed class SeatRepository(IDbConnectionFactory connectionFactory) : ISe
                     cancellationToken: cancellationToken));
 
             return seat;
-
-        }, DatabaseExceptionMapper.Map);
+        });
 
     public Task<Result<bool>> TryHoldAsync(Guid seatId, CancellationToken cancellationToken = default) =>
-        Success().MapTry(async () =>
+        RepositoryOperations.ExecuteAsync(connectionFactory, logger, async connection =>
         {
-            using var connection = _connectionFactory.CreateConnection();
-
             var rowsAffected = await connection.ExecuteAsync(
                 new CommandDefinition(
                     @"
@@ -158,14 +150,11 @@ public sealed class SeatRepository(IDbConnectionFactory connectionFactory) : ISe
                     cancellationToken: cancellationToken));
 
             return rowsAffected == 1;
-
-        }, DatabaseExceptionMapper.Map);
+        });
 
     public Task<Result<bool>> TryReserveAsync(Guid seatId, CancellationToken cancellationToken = default) =>
-        Success().MapTry(async () =>
+        RepositoryOperations.ExecuteAsync(connectionFactory, logger, async connection =>
         {
-            using var connection = _connectionFactory.CreateConnection();
-
             var rowsAffected = await connection.ExecuteAsync(
                 new CommandDefinition(
                     @"
@@ -186,14 +175,11 @@ public sealed class SeatRepository(IDbConnectionFactory connectionFactory) : ISe
                     cancellationToken: cancellationToken));
 
             return rowsAffected == 1;
-
-        }, DatabaseExceptionMapper.Map);
+        });
 
     public Task<Result<bool>> TryReleaseAsync(Guid seatId, CancellationToken cancellationToken = default) =>
-        Success().MapTry(async () =>
+        RepositoryOperations.ExecuteAsync(connectionFactory, logger, async connection =>
         {
-            using var connection = _connectionFactory.CreateConnection();
-
             var rowsAffected = await connection.ExecuteAsync(
                 new CommandDefinition(
                     @"
@@ -218,6 +204,5 @@ public sealed class SeatRepository(IDbConnectionFactory connectionFactory) : ISe
                     cancellationToken: cancellationToken));
 
             return rowsAffected == 1;
-
-        }, DatabaseExceptionMapper.Map);
+        });
 }

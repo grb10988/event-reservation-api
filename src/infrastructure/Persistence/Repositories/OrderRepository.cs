@@ -2,6 +2,7 @@ using System.Data;
 using Dapper;
 using EventReservation.Application.Interfaces;
 using EventReservation.Domain.Models;
+using Microsoft.Extensions.Logging;
 
 namespace EventReservation.Infrastructure.Persistence.Repositories;
 
@@ -24,10 +25,10 @@ internal sealed class OrderWithReservationRow
     public Guid? ReservationId { get; init; }
 }
 
-public sealed class OrderRepository(IDbConnectionFactory connectionFactory) : IOrderRepository
+public sealed class OrderRepository(
+    IDbConnectionFactory connectionFactory,
+    ILogger<OrderRepository> logger) : IOrderRepository
 {
-    private readonly IDbConnectionFactory _connectionFactory = connectionFactory;
-
     private static async Task<List<Guid>> LoadReservationIdsAsync(
         IDbConnection connection,
         Guid orderId,
@@ -50,10 +51,8 @@ public sealed class OrderRepository(IDbConnectionFactory connectionFactory) : IO
     }
 
     public Task<Result<Order>> GetByIdAsync(Guid id, CancellationToken cancellationToken = default) =>
-        Success().MapTry(async () =>
+        RepositoryOperations.ExecuteAsync(connectionFactory, logger, async connection =>
         {
-            using var connection = _connectionFactory.CreateConnection();
-
             var rows = (await connection.QueryAsync<OrderRow>(
                 new CommandDefinition(
                     @"
@@ -78,7 +77,7 @@ public sealed class OrderRepository(IDbConnectionFactory connectionFactory) : IO
 
             return (Rows: rows, ReservationIds: reservationIds);
 
-        }, DatabaseExceptionMapper.Map)
+        })
         .Bind(result => result.Rows.Count == 0
             ? Failure<Order>(RepositoryErrors.NotFound)
             : Success(Order.Rehydrate(
@@ -90,10 +89,8 @@ public sealed class OrderRepository(IDbConnectionFactory connectionFactory) : IO
                 result.Rows[0].CreatedAt)));
 
     public Task<Result<Order>> GetByConfirmationNumberAsync(string confirmationNumber, CancellationToken cancellationToken = default) =>
-        Success().MapTry(async () =>
+        RepositoryOperations.ExecuteAsync(connectionFactory, logger, async connection =>
         {
-            using var connection = _connectionFactory.CreateConnection();
-
             var rows = (await connection.QueryAsync<OrderRow>(
                 new CommandDefinition(
                     @"
@@ -118,7 +115,7 @@ public sealed class OrderRepository(IDbConnectionFactory connectionFactory) : IO
 
             return (Rows: rows, ReservationIds: reservationIds);
 
-        }, DatabaseExceptionMapper.Map)
+        })
         .Bind(result => result.Rows.Count == 0
             ? Failure<Order>(RepositoryErrors.NotFound)
             : Success(Order.Rehydrate(
@@ -129,11 +126,11 @@ public sealed class OrderRepository(IDbConnectionFactory connectionFactory) : IO
                 result.Rows[0].ConfirmationNumber,
                 result.Rows[0].CreatedAt)));
 
-    public Task<Result<IReadOnlyList<Order>>> GetByCustomerIdAsync(Guid customerId, CancellationToken cancellationToken = default) =>
-        Success().MapTry(async Task<IReadOnlyList<Order>> () =>
+    public Task<Result<IReadOnlyList<Order>>> GetByCustomerIdAsync(
+        Guid customerId,
+        CancellationToken cancellationToken = default) =>
+        RepositoryOperations.ExecuteAsync(connectionFactory, logger, async Task<IReadOnlyList<Order>> (connection) =>
         {
-            using var connection = _connectionFactory.CreateConnection();
-
             var rows = await connection.QueryAsync<OrderWithReservationRow>(
                 new CommandDefinition(
                     @"
@@ -177,13 +174,11 @@ public sealed class OrderRepository(IDbConnectionFactory connectionFactory) : IO
                     g.Key.ConfirmationNumber,
                     g.Key.CreatedAt))
                 .ToList();
-
-        }, DatabaseExceptionMapper.Map);
+        });
 
     public Task<Result<Order>> AddAsync(Order order, CancellationToken cancellationToken = default) =>
-        Success().MapTry(async () =>
+        RepositoryOperations.ExecuteAsync(connectionFactory, logger, async connection =>
         {
-            using var connection = _connectionFactory.CreateConnection();
             connection.Open();
             using var transaction = connection.BeginTransaction();
 
@@ -241,14 +236,11 @@ public sealed class OrderRepository(IDbConnectionFactory connectionFactory) : IO
             transaction.Commit();
 
             return order;
-
-        }, DatabaseExceptionMapper.Map);
+        });
 
     public Task<Result<bool>> TryCompleteAsync(Guid orderId, string confirmationNumber, CancellationToken cancellationToken = default) =>
-        Success().MapTry(async () =>
+        RepositoryOperations.ExecuteAsync(connectionFactory, logger, async connection =>
         {
-            using var connection = _connectionFactory.CreateConnection();
-
             var rowsAffected = await connection.ExecuteAsync(
                 new CommandDefinition(
                     @"
@@ -271,14 +263,11 @@ public sealed class OrderRepository(IDbConnectionFactory connectionFactory) : IO
                     cancellationToken: cancellationToken));
 
             return rowsAffected == 1;
-
-        }, DatabaseExceptionMapper.Map);
+        });
 
     public Task<Result<bool>> TryCancelAsync(Guid orderId, CancellationToken cancellationToken = default) =>
-        Success().MapTry(async () =>
+        RepositoryOperations.ExecuteAsync(connectionFactory, logger, async connection =>
         {
-            using var connection = _connectionFactory.CreateConnection();
-
             var rowsAffected = await connection.ExecuteAsync(
                 new CommandDefinition(
                     @"
@@ -299,14 +288,11 @@ public sealed class OrderRepository(IDbConnectionFactory connectionFactory) : IO
                     cancellationToken: cancellationToken));
 
             return rowsAffected == 1;
-
-        }, DatabaseExceptionMapper.Map);
+        });
 
     public Task<Result<bool>> TryRefundAsync(Guid orderId, CancellationToken cancellationToken = default) =>
-        Success().MapTry(async () =>
+        RepositoryOperations.ExecuteAsync(connectionFactory, logger, async connection =>
         {
-            using var connection = _connectionFactory.CreateConnection();
-
             var rowsAffected = await connection.ExecuteAsync(
                 new CommandDefinition(
                     @"
@@ -327,6 +313,5 @@ public sealed class OrderRepository(IDbConnectionFactory connectionFactory) : IO
                     cancellationToken: cancellationToken));
 
             return rowsAffected == 1;
-
-        }, DatabaseExceptionMapper.Map);
+        });
 }

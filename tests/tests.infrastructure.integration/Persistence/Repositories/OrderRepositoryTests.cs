@@ -2,6 +2,7 @@ using EventReservation.Application.Interfaces;
 using EventReservation.Domain.Models;
 using EventReservation.Infrastructure.Persistence;
 using EventReservation.Infrastructure.Persistence.Repositories;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 
 namespace EventReservation.Tests.Infrastructure.Integration.Persistence.Repositories;
@@ -22,12 +23,12 @@ public class OrderRepositoryTests : IntegrationTestBase
     [TestInitialize]
     public void Setup()
     {
-        _venueRepository = new VenueRepository(ConnectionFactory);
-        _seatRepository = new SeatRepository(ConnectionFactory);
-        _eventRepository = new EventRepository(ConnectionFactory);
-        _customerRepository = new CustomerRepository(ConnectionFactory);
-        _reservationRepository = new ReservationRepository(ConnectionFactory);
-        _orderRepository = new OrderRepository(ConnectionFactory);
+        _venueRepository = new VenueRepository(ConnectionFactory, NullLogger<VenueRepository>.Instance);
+        _seatRepository = new SeatRepository(ConnectionFactory, NullLogger<SeatRepository>.Instance);
+        _eventRepository = new EventRepository(ConnectionFactory, NullLogger<EventRepository>.Instance);
+        _customerRepository = new CustomerRepository(ConnectionFactory, NullLogger<CustomerRepository>.Instance);
+        _reservationRepository = new ReservationRepository(ConnectionFactory, NullLogger<ReservationRepository>.Instance);
+        _orderRepository = new OrderRepository(ConnectionFactory, NullLogger<OrderRepository>.Instance);
         _timeProvider = new FakeTimeProvider(Now);
     }
 
