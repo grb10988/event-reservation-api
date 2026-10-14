@@ -30,7 +30,6 @@ CREATE TABLE seats (
     section varchar(50) NOT NULL,
     row integer NOT NULL CHECK (row > 0),
     number integer NOT NULL CHECK (number > 0),
-    status varchar(20) NOT NULL CHECK (status IN ('Available', 'Held', 'Reserved')),
     created_at timestamptz NOT NULL DEFAULT now(),
     updated_at timestamptz NOT NULL DEFAULT now(),
     created_by varchar(50) NOT NULL DEFAULT current_user,
@@ -51,6 +50,20 @@ CREATE TABLE events (
     updated_at timestamptz NOT NULL DEFAULT now(),
     created_by varchar(50) NOT NULL DEFAULT current_user,
     updated_by varchar(50) NOT NULL DEFAULT current_user
+);
+
+CREATE TABLE event_seats (
+    event_id uuid NOT NULL REFERENCES events(id),
+    seat_id uuid NOT NULL REFERENCES seats(id),
+    status varchar(20) NOT NULL CHECK (status IN ('Available', 'Held', 'Reserved')),
+    held_by uuid NULL, -- fencing token: the reservation that holds/reserves this seat for this event.
+                       -- No FK, Create acquires the seat before the reservation row exists.
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    created_by varchar(50) NOT NULL DEFAULT current_user,
+    updated_by varchar(50) NOT NULL DEFAULT current_user,
+    PRIMARY KEY (seat_id, event_id),
+    CONSTRAINT ck_event_seats_held_by CHECK ((status = 'Available') = (held_by IS NULL))
 );
 
 CREATE TABLE customers (
@@ -75,7 +88,9 @@ CREATE TABLE reservations (
     created_at timestamptz NOT NULL,
     updated_at timestamptz NOT NULL DEFAULT now(),
     created_by varchar(50) NOT NULL DEFAULT current_user,
-    updated_by varchar(50) NOT NULL DEFAULT current_user
+    updated_by varchar(50) NOT NULL DEFAULT current_user,
+    CONSTRAINT fk_reservations_event_seats
+        FOREIGN KEY (seat_id, event_id) REFERENCES event_seats (seat_id, event_id)
 );
 
 -- Enforces "at most one active reservation per seat+event" at the database
@@ -101,6 +116,9 @@ CREATE TABLE order_reservations (
     PRIMARY KEY (order_id, reservation_id)
 );
 
+CREATE UNIQUE INDEX ux_order_reservations_reservation
+    ON order_reservations (reservation_id);
+
 -- ------------------------------------------------------------
 -- Trigger: keeps updated_at/updated_by current on every UPDATE.
 -- One function, reused across every table below.
@@ -125,6 +143,10 @@ CREATE TRIGGER trg_seats_updated
 
 CREATE TRIGGER trg_events_updated
     BEFORE UPDATE ON events
+    FOR EACH ROW EXECUTE FUNCTION set_updated_metadata();
+
+CREATE TRIGGER trg_event_seats_updated
+    BEFORE UPDATE ON event_seats
     FOR EACH ROW EXECUTE FUNCTION set_updated_metadata();
 
 CREATE TRIGGER trg_customers_updated

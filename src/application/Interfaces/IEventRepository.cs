@@ -2,7 +2,7 @@ using EventReservation.Domain.Models;
 
 namespace EventReservation.Application.Interfaces;
 
-public interface IEventRepository
+public interface IEventRepository : IRepository
 {
     Task<Result<Event>> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
     Task<Result<IReadOnlyList<Event>>> GetByVenueIdAsync(Guid venueId, CancellationToken cancellationToken = default);

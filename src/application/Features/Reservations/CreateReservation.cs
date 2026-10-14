@@ -23,7 +23,7 @@ public sealed record CreateReservationCommand(
 
 public sealed class CreateReservationCommandHandler(
     IReservationRepository reservationRepository,
-    ISeatRepository seatRepository,
+    IEventSeatRepository eventSeatRepository,
     TimeProvider timeProvider)
     : ICommandHandler<CreateReservationCommand, CreateReservationResult>
 {
@@ -31,26 +31,43 @@ public sealed class CreateReservationCommandHandler(
         CreateReservationCommand command,
         CancellationToken cancellationToken = default)
     {
-        var result = seatRepository.TryHoldAsync(command.SeatId, cancellationToken)
-            .Ensure(held => held, Errors.SeatNotAvailable)
-            .Bind(_ => Reservation.Create(
+        var result = Reservation.Create(
                 command.SeatId,
                 command.EventId,
                 command.CustomerId,
                 command.Price,
                 timeProvider,
-                command.HoldDuration))
-            .Bind(reservation => reservationRepository.AddAsync(reservation, cancellationToken))
-            .TapError(_ => seatRepository.TryReleaseAsync(command.SeatId, cancellationToken))
-            .Map(reservation => new CreateReservationResult(
-                reservation.Id,
+                command.HoldDuration)
+            .Bind(reservation => AcquireAndPersistAsync(reservation, cancellationToken));
+
+        return result;
+    }
+
+    private Task<Result<CreateReservationResult>> AcquireAndPersistAsync(
+        Reservation reservation,
+        CancellationToken cancellationToken)
+    {
+        var result = eventSeatRepository.TryHoldAsync(
                 reservation.SeatId,
                 reservation.EventId,
-                reservation.CustomerId,
-                reservation.Price,
-                reservation.Status,
-                reservation.CreatedAt,
-                reservation.HoldExpiresAt));
+                reservation.Id,
+                cancellationToken)
+            .Ensure(held => held, Errors.SeatNotAvailable)
+            .Bind(_ => reservationRepository.AddAsync(reservation, cancellationToken)
+                .TapError(_ => eventSeatRepository.TryReleaseAsync(
+                    reservation.SeatId,
+                    reservation.EventId,
+                    reservation.Id,
+                    cancellationToken)))
+            .Map(added => new CreateReservationResult(
+                added.Id,
+                added.SeatId,
+                added.EventId,
+                added.CustomerId,
+                added.Price,
+                added.Status,
+                added.CreatedAt,
+                added.HoldExpiresAt));
 
         return result;
     }
@@ -60,6 +77,6 @@ public sealed class CreateReservationCommandHandler(
         private const string Context = "CREATE_RESERVATION";
 
         public static ResultError SeatNotAvailable =>
-            new(Context, "The requested seat is not available to hold.", ErrorCategory.Conflict);
+            new(Context, "The requested seat is not available to hold for this event.", ErrorCategory.Conflict);
     }
 }

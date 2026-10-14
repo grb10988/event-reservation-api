@@ -1,6 +1,6 @@
 using EventReservation.Application.Interfaces;
+using EventReservation.Infrastructure.BackgroundServices;
 using EventReservation.Infrastructure.Persistence;
-using EventReservation.Infrastructure.Persistence.Repositories;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -18,20 +18,25 @@ public static class InfrastructureServiceCollectionExtensions
 
         services
             .AddSingleton<IDbConnectionFactory, NpgsqlConnectionFactory>()
-            .AddRepositories();
+            .AddRepositories()
+            .Configure<ReservationHoldSweepSettings>(configuration.GetSection("ReservationHoldSweep"))
+            .AddHostedService<ReservationHoldSweepWorker>();
 
         return services;
     }
 
     private static IServiceCollection AddRepositories(this IServiceCollection services)
     {
-        services
-            .AddScoped<IVenueRepository, VenueRepository>()
-            .AddScoped<ISeatRepository, SeatRepository>()
-            .AddScoped<IEventRepository, EventRepository>()
-            .AddScoped<IReservationRepository, ReservationRepository>()
-            .AddScoped<IOrderRepository, OrderRepository>()
-            .AddScoped<ICustomerRepository, CustomerRepository>();
+        var assembly = typeof(InfrastructureServiceCollectionExtensions).Assembly;
+
+        var registrations = assembly.GetTypes()
+            .Where(t => t is { IsClass: true, IsAbstract: false })
+            .SelectMany(implementation => implementation.GetInterfaces()
+                .Where(i => i != typeof(IRepository) && typeof(IRepository).IsAssignableFrom(i))
+                .Select(serviceType => (serviceType, implementation)));
+
+        foreach (var (serviceType, implementation) in registrations)
+            services.AddScoped(serviceType, implementation);
 
         return services;
     }

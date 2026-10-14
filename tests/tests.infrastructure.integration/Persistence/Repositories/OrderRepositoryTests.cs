@@ -1,6 +1,5 @@
 using EventReservation.Application.Interfaces;
 using EventReservation.Domain.Models;
-using EventReservation.Infrastructure.Persistence;
 using EventReservation.Infrastructure.Persistence.Repositories;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
@@ -10,15 +9,22 @@ namespace EventReservation.Tests.Infrastructure.Integration.Persistence.Reposito
 [TestClass]
 public class OrderRepositoryTests : IntegrationTestBase
 {
-    private static readonly DateTimeOffset Now = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+    private static readonly DateTimeOffset Now = TruncateToSeconds(DateTimeOffset.UtcNow);
 
     private IVenueRepository _venueRepository = null!;
     private ISeatRepository _seatRepository = null!;
     private IEventRepository _eventRepository = null!;
+    private IEventSeatRepository _eventSeatRepository = null!;
     private ICustomerRepository _customerRepository = null!;
     private IReservationRepository _reservationRepository = null!;
     private IOrderRepository _orderRepository = null!;
     private FakeTimeProvider _timeProvider = null!;
+
+    private async Task ConfirmReservationAsync(Guid reservationId)
+    {
+        var result = await _reservationRepository.TryConfirmAsync(reservationId);
+        Assert.IsTrue(result is { IsSuccess: true, Value: true }, string.Join("; ", result.ToFailureMessages()));
+    }
 
     [TestInitialize]
     public void Setup()
@@ -26,6 +32,7 @@ public class OrderRepositoryTests : IntegrationTestBase
         _venueRepository = new VenueRepository(ConnectionFactory, NullLogger<VenueRepository>.Instance);
         _seatRepository = new SeatRepository(ConnectionFactory, NullLogger<SeatRepository>.Instance);
         _eventRepository = new EventRepository(ConnectionFactory, NullLogger<EventRepository>.Instance);
+        _eventSeatRepository = new EventSeatRepository(ConnectionFactory, NullLogger<EventSeatRepository>.Instance);
         _customerRepository = new CustomerRepository(ConnectionFactory, NullLogger<CustomerRepository>.Instance);
         _reservationRepository = new ReservationRepository(ConnectionFactory, NullLogger<ReservationRepository>.Instance);
         _orderRepository = new OrderRepository(ConnectionFactory, NullLogger<OrderRepository>.Instance);
@@ -70,6 +77,11 @@ public class OrderRepositoryTests : IntegrationTestBase
 
     private async Task<Guid> SeedReservationAsync(Guid seatId, Guid eventId, Guid customerId)
     {
+        var seatLookup = await _seatRepository.GetByIdAsync(seatId);
+        Assert.IsTrue(seatLookup.IsSuccess, string.Join("; ", seatLookup.ToFailureMessages()));
+        var provisionResult = await _eventSeatRepository.ProvisionAsync(eventId, seatLookup.Value.VenueId);
+        Assert.IsTrue(provisionResult.IsSuccess, string.Join("; ", provisionResult.ToFailureMessages()));
+
         var reservation = Reservation.Create(seatId, eventId, customerId, 50.00m, _timeProvider).Value;
         Assert.IsNotNull(reservation);
         var result = await _reservationRepository.AddAsync(reservation);
@@ -152,6 +164,7 @@ public class OrderRepositoryTests : IntegrationTestBase
         var completed = order.Complete().Value;
         Assert.IsNotNull(completed);
         Assert.IsNotNull(completed.ConfirmationNumber);
+        await ConfirmReservationAsync(reservationId);
         await _orderRepository.TryCompleteAsync(order.Id, completed.ConfirmationNumber);
 
         // Act
@@ -230,7 +243,7 @@ public class OrderRepositoryTests : IntegrationTestBase
     // ============================================================
 
     [TestMethod]
-    public async Task TryCompleteAsync_WhenPending_ReturnsTrueAndPersistsStatusAndConfirmationNumber()
+    public async Task TryCompleteAsync_WhenAllReservationsConfirmed_ReturnsTrueAndPersistsStatusAndConfirmationNumber()
     {
         // Arrange
         var venueId = await SeedVenueAsync();
@@ -241,6 +254,7 @@ public class OrderRepositoryTests : IntegrationTestBase
         var order = await SeedPendingOrderAsync(customerId, [reservationId]);
         var completed = order.Complete().Value;
         Assert.IsNotNull(completed);
+        await ConfirmReservationAsync(reservationId);
 
         // Act
         var completeResult = await _orderRepository.TryCompleteAsync(order.Id, completed.ConfirmationNumber!);
@@ -251,6 +265,70 @@ public class OrderRepositoryTests : IntegrationTestBase
         Assert.IsNotNull(getResult.Value);
         Assert.AreEqual(OrderStatus.Completed, getResult.Value.Status);
         Assert.AreEqual(completed.ConfirmationNumber, getResult.Value.ConfirmationNumber);
+    }
+
+    [TestMethod]
+    public async Task TryCompleteAsync_WhenAnyReservationIsNotConfirmed_ReturnsFalse_AndLeavesOrderPending()
+    {
+        // Arrange - the pivot's own invariant check, and the whole reason the
+        // resumable redesign is safe: two reservations, only one confirmed -
+        // the pivot must refuse until every reservation it covers is Confirmed
+        var venueId = await SeedVenueAsync();
+        var eventId = await SeedEventAsync(venueId);
+        var customerId = await SeedCustomerAsync("jane.doe@example.com");
+        var seatId1 = await SeedSeatAsync(venueId, "A", 1, 1);
+        var seatId2 = await SeedSeatAsync(venueId, "A", 1, 2);
+        var reservationId1 = await SeedReservationAsync(seatId1, eventId, customerId);
+        var reservationId2 = await SeedReservationAsync(seatId2, eventId, customerId);
+        var order = await SeedPendingOrderAsync(customerId, [reservationId1, reservationId2]);
+        var completed = order.Complete().Value;
+        Assert.IsNotNull(completed);
+        await ConfirmReservationAsync(reservationId1);
+        // reservationId2 stays Held - deliberately not confirmed
+
+        // Act
+        var completeResult = await _orderRepository.TryCompleteAsync(order.Id, completed.ConfirmationNumber!);
+        var getResult = await _orderRepository.GetByIdAsync(order.Id);
+
+        // Assert
+        Assert.IsTrue(completeResult.IsSuccess, string.Join("; ", completeResult.ToFailureMessages()));
+        Assert.IsFalse(completeResult.Value);
+        Assert.IsNotNull(getResult.Value);
+        Assert.AreEqual(OrderStatus.Pending, getResult.Value.Status);
+        Assert.IsNull(getResult.Value.ConfirmationNumber);
+    }
+
+    [TestMethod]
+    public async Task TryCompleteAsync_WhenAllConfirmedAfterARetry_SucceedsOnTheSecondAttempt()
+    {
+        // Arrange - simulates CompleteOrder's exact resumability scenario: the
+        // first attempt confirms one reservation then "crashes" before the
+        // pivot runs; a retry confirms the rest and the pivot then succeeds
+        var venueId = await SeedVenueAsync();
+        var eventId = await SeedEventAsync(venueId);
+        var customerId = await SeedCustomerAsync("jane.doe@example.com");
+        var seatId1 = await SeedSeatAsync(venueId, "A", 1, 1);
+        var seatId2 = await SeedSeatAsync(venueId, "A", 1, 2);
+        var reservationId1 = await SeedReservationAsync(seatId1, eventId, customerId);
+        var reservationId2 = await SeedReservationAsync(seatId2, eventId, customerId);
+        var order = await SeedPendingOrderAsync(customerId, [reservationId1, reservationId2]);
+        var completed = order.Complete().Value;
+        Assert.IsNotNull(completed);
+        await ConfirmReservationAsync(reservationId1);
+
+        // Act - first attempt: reservationId2 still Held, pivot must refuse
+        var firstAttempt = await _orderRepository.TryCompleteAsync(order.Id, completed.ConfirmationNumber!);
+
+        // "Retry": the rest of the reservations finish confirming
+        await ConfirmReservationAsync(reservationId2);
+        var secondAttempt = await _orderRepository.TryCompleteAsync(order.Id, completed.ConfirmationNumber!);
+        var getResult = await _orderRepository.GetByIdAsync(order.Id);
+
+        // Assert
+        Assert.IsTrue(firstAttempt is { IsSuccess: true, Value: false });
+        Assert.IsTrue(secondAttempt is { IsSuccess: true, Value: true });
+        Assert.IsNotNull(getResult.Value);
+        Assert.AreEqual(OrderStatus.Completed, getResult.Value.Status);
     }
 
     [TestMethod]
@@ -265,6 +343,7 @@ public class OrderRepositoryTests : IntegrationTestBase
         var order = await SeedPendingOrderAsync(customerId, [reservationId]);
         var completed = order.Complete().Value;
         Assert.IsNotNull(completed);
+        await ConfirmReservationAsync(reservationId);
         await _orderRepository.TryCompleteAsync(order.Id, completed.ConfirmationNumber!);
 
         // Act
@@ -312,6 +391,7 @@ public class OrderRepositoryTests : IntegrationTestBase
         var order = await SeedPendingOrderAsync(customerId, [reservationId]);
         var completed = order.Complete().Value;
         Assert.IsNotNull(completed);
+        await ConfirmReservationAsync(reservationId);
         await _orderRepository.TryCompleteAsync(order.Id, completed.ConfirmationNumber!);
 
         // Act
@@ -338,6 +418,7 @@ public class OrderRepositoryTests : IntegrationTestBase
         var order = await SeedPendingOrderAsync(customerId, [reservationId]);
         var completed = order.Complete().Value;
         Assert.IsNotNull(completed);
+        await ConfirmReservationAsync(reservationId);
         await _orderRepository.TryCompleteAsync(order.Id, completed.ConfirmationNumber!);
 
         // Act
@@ -367,5 +448,136 @@ public class OrderRepositoryTests : IntegrationTestBase
         // Assert
         Assert.IsTrue(result.IsSuccess, string.Join("; ", result.ToFailureMessages()));
         Assert.IsFalse(result.Value);
+    }
+
+    // ============================================================
+    // TryCancelAsync concurrency
+    // ============================================================
+
+    [TestMethod]
+    public async Task TryCancelAsync_WhenTwentyFiveRequestsRaceForTheSameOrder_ExactlyOneSucceeds()
+    {
+        // Arrange
+        var venueId = await SeedVenueAsync();
+        var eventId = await SeedEventAsync(venueId);
+        var customerId = await SeedCustomerAsync("jane.doe@example.com");
+        var seatId = await SeedSeatAsync(venueId, "A", 1, 1);
+        var reservationId = await SeedReservationAsync(seatId, eventId, customerId);
+        var order = await SeedPendingOrderAsync(customerId, [reservationId]);
+
+        // Act
+        var results = await Task.WhenAll(
+            Enumerable.Range(0, 25).Select(_ => _orderRepository.TryCancelAsync(order.Id)));
+
+        // Assert
+        Assert.IsTrue(results.All(r => r.IsSuccess));
+        Assert.AreEqual(1, results.Count(r => r.Value));
+
+        var finalState = await _orderRepository.GetByIdAsync(order.Id);
+        Assert.IsNotNull(finalState.Value);
+        Assert.AreEqual(OrderStatus.Cancelled, finalState.Value.Status);
+    }
+
+    // ============================================================
+    // TryRefundAsync concurrency
+    // ============================================================
+
+    [TestMethod]
+    public async Task TryRefundAsync_WhenTwentyFiveRequestsRaceForTheSameOrder_ExactlyOneSucceeds()
+    {
+        // Arrange
+        var venueId = await SeedVenueAsync();
+        var eventId = await SeedEventAsync(venueId);
+        var customerId = await SeedCustomerAsync("jane.doe@example.com");
+        var seatId = await SeedSeatAsync(venueId, "A", 1, 1);
+        var reservationId = await SeedReservationAsync(seatId, eventId, customerId);
+        var order = await SeedPendingOrderAsync(customerId, [reservationId]);
+        var completed = order.Complete().Value;
+        Assert.IsNotNull(completed);
+        await ConfirmReservationAsync(reservationId);
+        await _orderRepository.TryCompleteAsync(order.Id, completed.ConfirmationNumber!);
+
+        // Act
+        var results = await Task.WhenAll(
+            Enumerable.Range(0, 25).Select(_ => _orderRepository.TryRefundAsync(order.Id)));
+
+        // Assert
+        Assert.IsTrue(results.All(r => r.IsSuccess));
+        Assert.AreEqual(1, results.Count(r => r.Value));
+
+        var finalState = await _orderRepository.GetByIdAsync(order.Id);
+        Assert.IsNotNull(finalState.Value);
+        Assert.AreEqual(OrderStatus.Refunded, finalState.Value.Status);
+    }
+
+    // ============================================================
+    // TryCompleteAsync concurrency
+    // ============================================================
+
+    [TestMethod]
+    public async Task TryCompleteAsync_WhenTwentyFiveRequestsRaceForTheSameOrder_ExactlyOneSucceeds()
+    {
+        // Arrange - all reservations already Confirmed, mirroring a legitimate
+        // retry racing a genuine duplicate-submit; only one write can land
+        var venueId = await SeedVenueAsync();
+        var eventId = await SeedEventAsync(venueId);
+        var customerId = await SeedCustomerAsync("jane.doe@example.com");
+        var seatId = await SeedSeatAsync(venueId, "A", 1, 1);
+        var reservationId = await SeedReservationAsync(seatId, eventId, customerId);
+        var order = await SeedPendingOrderAsync(customerId, [reservationId]);
+        await ConfirmReservationAsync(reservationId);
+        var confirmationNumbers = Enumerable.Range(0, 25).Select(_ => Guid.NewGuid().ToString("N")[..16]).ToArray();
+
+        // Act
+        var results = await Task.WhenAll(
+            confirmationNumbers.Select(number => _orderRepository.TryCompleteAsync(order.Id, number)));
+
+        // Assert
+        Assert.IsTrue(results.All(r => r.IsSuccess));
+        Assert.AreEqual(1, results.Count(r => r.Value));
+
+        var finalState = await _orderRepository.GetByIdAsync(order.Id);
+        Assert.IsNotNull(finalState.Value);
+        Assert.AreEqual(OrderStatus.Completed, finalState.Value.Status);
+        CollectionAssert.Contains(confirmationNumbers, finalState.Value.ConfirmationNumber);
+    }
+
+    // ============================================================
+    // AddAsync concurrency
+    // ============================================================
+
+    [TestMethod]
+    public async Task AddAsync_WhenTwoOrdersClaimTheSameReservationConcurrently_ExactlyOneSucceeds_AndTheLoserLeavesNoOrphanedOrder()
+    {
+        // Arrange
+        var venueId = await SeedVenueAsync();
+        var eventId = await SeedEventAsync(venueId);
+        var customerId = await SeedCustomerAsync("jane.doe@example.com");
+        var seatId = await SeedSeatAsync(venueId, "A", 1, 1);
+        var reservationId = await SeedReservationAsync(seatId, eventId, customerId);
+
+        var order1 = Order.Create(customerId, [reservationId], _timeProvider).Value;
+        var order2 = Order.Create(customerId, [reservationId], _timeProvider).Value;
+        Assert.IsNotNull(order1);
+        Assert.IsNotNull(order2);
+
+        // Act
+        var results = await Task.WhenAll(
+            _orderRepository.AddAsync(order1),
+            _orderRepository.AddAsync(order2));
+
+        // Assert - exactly one of the two inserts succeeds
+        Assert.AreEqual(1, results.Count(r => r.IsSuccess));
+        Assert.AreEqual(1, results.Count(r => r.IsFailure));
+
+        var winner = results[0].IsSuccess ? order1 : order2;
+        var loser = results[0].IsSuccess ? order2 : order1;
+
+        var winnerLookup = await _orderRepository.GetByIdAsync(winner.Id);
+        var loserLookup = await _orderRepository.GetByIdAsync(loser.Id);
+
+        Assert.IsTrue(winnerLookup.IsSuccess);
+        Assert.IsTrue(loserLookup.IsFailure, "The losing order's insert must have rolled back entirely - no orphaned orders row.");
+        CollectionAssert.Contains(loserLookup.Errors.ToList(), RepositoryErrors.NotFound);
     }
 }

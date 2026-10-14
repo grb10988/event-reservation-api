@@ -145,6 +145,47 @@ public sealed class ReservationRepository(
                 r.HoldExpiresAt)).ToList();
         });
 
+    public Task<Result<IReadOnlyList<Reservation>>> GetByEventIdAsync(
+        Guid eventId,
+        CancellationToken cancellationToken = default) =>
+        RepositoryOperations.ExecuteAsync(
+            connectionFactory,
+            logger,
+            async Task<IReadOnlyList<Reservation>> (connection) =>
+        {
+            var rows = await connection.QueryAsync<ReservationRow>(
+                new CommandDefinition(
+                    @"
+                    SELECT
+                        r.id AS Id,
+                        r.seat_id AS SeatId,
+                        r.event_id AS EventId,
+                        r.customer_id AS CustomerId,
+                        r.price AS Price,
+                        r.status AS Status,
+                        r.created_at AS CreatedAt,
+                        r.hold_expires_at AS HoldExpiresAt
+                    FROM
+                        reservations AS r
+                    WHERE
+                        r.event_id = @EventId
+                    ORDER BY
+                        r.created_at DESC
+                    ",
+                    new { EventId = eventId },
+                    cancellationToken: cancellationToken));
+
+            return rows.Select(r => Reservation.Rehydrate(
+                r.Id,
+                r.SeatId,
+                r.EventId,
+                r.CustomerId,
+                r.Price,
+                r.Status,
+                r.CreatedAt,
+                r.HoldExpiresAt)).ToList();
+        });
+
     public Task<Result<Reservation>> AddAsync(Reservation reservation, CancellationToken cancellationToken = default) =>
         RepositoryOperations.ExecuteAsync(connectionFactory, logger, async connection =>
         {

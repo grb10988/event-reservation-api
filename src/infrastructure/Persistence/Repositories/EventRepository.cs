@@ -154,8 +154,7 @@ public sealed class EventRepository(
                         description = @Description,
                         start_time = @StartTime,
                         end_time = @EndTime,
-                        ticket_price = @TicketPrice,
-                        status = @Status
+                        ticket_price = @TicketPrice
                     WHERE
                         id = @Id
                     ",
@@ -166,8 +165,7 @@ public sealed class EventRepository(
                         @event.Description,
                         @event.StartTime,
                         @event.EndTime,
-                        @event.TicketPrice,
-                        Status = @event.Status.ToString()
+                        @event.TicketPrice
                     },
                     cancellationToken: cancellationToken));
         })

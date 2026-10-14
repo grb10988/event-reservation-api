@@ -1,5 +1,6 @@
 using EventReservation.Application.Abstractions.Requests;
 using EventReservation.Application.Interfaces;
+using EventReservation.Domain.Models;
 
 namespace EventReservation.Application.Features.Reservations;
 
@@ -8,7 +9,7 @@ public sealed record ExpireReservationCommand(Guid Id) : ICommand<ExpireReservat
 
 public sealed class ExpireReservationCommandHandler(
     IReservationRepository reservationRepository,
-    ISeatRepository seatRepository)
+    IEventSeatRepository eventSeatRepository)
     : ICommandHandler<ExpireReservationCommand, ExpireReservationResult>
 {
     public Task<Result<ExpireReservationResult>> HandleAsync(
@@ -16,12 +17,24 @@ public sealed class ExpireReservationCommandHandler(
             CancellationToken cancellationToken = default)
     {
         var result = reservationRepository.GetByIdAsync(command.Id, cancellationToken)
-            .Bind(reservation => reservation.Expire())
-            .Bind(reservation => reservationRepository.TryExpireAsync(reservation.Id, cancellationToken)
-                .Ensure(expired => expired, Errors.ReservationNotHeld)
-                .Bind(_ => seatRepository.TryReleaseAsync(reservation.SeatId, cancellationToken))
-                .Ensure(released => released, Errors.SeatCouldNotBeReleased)
-                .Map(_ => new ExpireReservationResult(reservation.Id)));
+            .Bind(reservation => reservation.Status is ReservationStatus.Cancelled or ReservationStatus.Expired
+                ? Task.FromResult(Success(new ExpireReservationResult(reservation.Id)))
+                : ExpireAndReleaseAsync(reservation, cancellationToken));
+
+        return result;
+    }
+
+    private Task<Result<ExpireReservationResult>> ExpireAndReleaseAsync(Reservation reservation, CancellationToken cancellationToken)
+    {
+        var result = reservation.Expire()
+            .Bind(expired => reservationRepository.TryExpireAsync(expired.Id, cancellationToken)
+                .Ensure(expiredInDb => expiredInDb, Errors.ReservationNotHeld)
+                .Bind(_ => eventSeatRepository.TryReleaseAsync(
+                    expired.SeatId,
+                    expired.EventId,
+                    expired.Id,
+                    cancellationToken))
+                .Map(_ => new ExpireReservationResult(expired.Id)));
 
         return result;
     }
@@ -32,8 +45,5 @@ public sealed class ExpireReservationCommandHandler(
 
         public static ResultError ReservationNotHeld =>
             new(Context, "The requested reservation is not currently held and cannot be expired.", ErrorCategory.Conflict);
-
-        public static ResultError SeatCouldNotBeReleased =>
-            new(Context, "The reservation was expired, but the associated seat could not be released.", ErrorCategory.Conflict);
     }
 }

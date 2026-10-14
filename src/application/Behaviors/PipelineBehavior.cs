@@ -18,10 +18,11 @@ public static class PipelineLogging
                 elapsed.TotalMilliseconds);
         else
             logger.LogWarning(
-                "Handled {Name} with failure in {ElapsedMilliseconds:F2}ms: {Errors}",
+                "Handled {Name} with failure in {ElapsedMilliseconds:F2}ms. Contexts: {ErrorContexts}. Errors: {Errors}",
                 name,
                 elapsed.TotalMilliseconds,
-                string.Join("; ", result.ToFailureMessages()));
+                result.ToContexts(),
+                result.ToDiagnosticMessages());
     }
 
     public static void LogException(ILogger logger, string name, Exception ex, TimeSpan elapsed) =>
@@ -40,8 +41,9 @@ public static class PipelineTracing
             activity?.SetStatus(ActivityStatusCode.Ok);
         else
         {
-            activity?.SetStatus(ActivityStatusCode.Error, string.Join("; ", result.ToFailureMessages()));
+            activity?.SetStatus(ActivityStatusCode.Error, result.ToDiagnosticMessages());
             activity?.SetTag("error.type", "business_failure");
+            activity?.SetTag("error.contexts", result.ToContexts());
         }
     }
 
@@ -73,4 +75,42 @@ public static class PipelineMetrics
 
         return (meter, total, exceptions, duration);
     }
+
+    public static KeyValuePair<string, object?>[] BuildOutcomeTags(
+        string dimensionName,
+        string name,
+        string outcome,
+        Result result) =>
+        outcome == "failure"
+            ? new[]
+                {
+                    new KeyValuePair<string, object?>(dimensionName, name),
+                    new KeyValuePair<string, object?>("outcome", outcome),
+                    new KeyValuePair<string, object?>("error_context", result.Errors.Select(e => e.Context).FirstOrDefault())
+                }
+            : new[]
+                {
+                    new KeyValuePair<string, object?>(dimensionName, name),
+                    new KeyValuePair<string, object?>("outcome", outcome)
+                };
+
+    public static KeyValuePair<string, object?>[] BuildExceptionTags(
+        string dimensionName,
+        string name,
+        Exception ex) =>
+        new[]
+        {
+            new KeyValuePair<string, object?>(dimensionName, name),
+            new KeyValuePair<string, object?>("exception_type", ex.GetType().Name)
+        };
+
+    public static KeyValuePair<string, object?>[] BuildDurationTags(
+        string dimensionName,
+        string name,
+        string outcome) =>
+        new[]
+        {
+            new KeyValuePair<string, object?>(dimensionName, name),
+            new KeyValuePair<string, object?>("outcome", outcome)
+        };
 }

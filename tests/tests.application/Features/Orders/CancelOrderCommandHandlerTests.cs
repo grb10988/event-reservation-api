@@ -12,11 +12,10 @@ namespace EventReservation.Tests.Application.Features.Orders;
 public class CancelOrderCommandHandlerTests
 {
     private static readonly Guid CustomerId = Guid.NewGuid();
-    private static readonly Guid ReservationId1 = Guid.NewGuid();
-    private static readonly Guid ReservationId2 = Guid.NewGuid();
     private static readonly DateTimeOffset Now = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
     private IOrderRepository _orderRepository = null!;
+    private IReservationRepository _reservationRepository = null!;
     private IDispatcher _dispatcher = null!;
     private FakeTimeProvider _timeProvider = null!;
     private CancelOrderCommandHandler _handler = null!;
@@ -25,27 +24,42 @@ public class CancelOrderCommandHandlerTests
     public void Setup()
     {
         _orderRepository = Substitute.For<IOrderRepository>();
+        _reservationRepository = Substitute.For<IReservationRepository>();
         _dispatcher = Substitute.For<IDispatcher>();
         _timeProvider = new FakeTimeProvider(Now);
-        _handler = new CancelOrderCommandHandler(_orderRepository, _dispatcher);
+        _handler = new CancelOrderCommandHandler(_orderRepository, _reservationRepository, _dispatcher);
     }
 
-    private Order CreatePendingOrder() =>
-        Order.Create(CustomerId, [ReservationId1, ReservationId2], _timeProvider).Value!;
+    private Reservation CreateHeldReservation() =>
+        Reservation.Create(Guid.NewGuid(), Guid.NewGuid(), CustomerId, 50.00m, _timeProvider).Value!;
+
+    private Order CreatePendingOrder(params Reservation[] reservations) =>
+        Order.Create(CustomerId, reservations.Select(r => r.Id).ToArray(), _timeProvider).Value!;
+
+    private void StubReservation(Reservation reservation) =>
+        _reservationRepository.GetByIdAsync(reservation.Id, Arg.Any<CancellationToken>()).Returns(Success(reservation));
+
+    private void StubDispatcherCancelsAnything() =>
+        _dispatcher.SendAsync<CancelReservationResult>(Arg.Any<CancelReservationCommand>(), Arg.Any<CancellationToken>())
+            .Returns(callInfo => Success(new CancelReservationResult(((CancelReservationCommand)callInfo[0]).Id)));
 
     // ============================================================
     // HandleAsync
     // ============================================================
 
     [TestMethod]
-    public async Task HandleAsync_WhenAllReservationsCancel_ReturnsSuccess_AndCallsTryCancelAsync()
+    public async Task HandleAsync_WhenClaimWins_CancelsEachActiveReservation_ReturnsSuccess()
     {
         // Arrange
-        var order = CreatePendingOrder();
+        var reservation1 = CreateHeldReservation();
+        var reservation2 = CreateHeldReservation();
+        var order = CreatePendingOrder(reservation1, reservation2);
+
         _orderRepository.GetByIdAsync(order.Id, Arg.Any<CancellationToken>()).Returns(Success(order));
-        _dispatcher.SendAsync<CancelReservationResult>(Arg.Any<CancelReservationCommand>(), Arg.Any<CancellationToken>())
-            .Returns(callInfo => Success(new CancelReservationResult(((CancelReservationCommand)callInfo[0]).Id)));
         _orderRepository.TryCancelAsync(order.Id, Arg.Any<CancellationToken>()).Returns(Success(true));
+        StubReservation(reservation1);
+        StubReservation(reservation2);
+        StubDispatcherCancelsAnything();
 
         // Act
         var result = await _handler.HandleAsync(new CancelOrderCommand(order.Id));
@@ -53,37 +67,40 @@ public class CancelOrderCommandHandlerTests
         // Assert
         Assert.IsTrue(result.IsSuccess);
         await _orderRepository.Received(1).TryCancelAsync(order.Id, Arg.Any<CancellationToken>());
+        await _dispatcher.Received(1).SendAsync<CancelReservationResult>(
+            Arg.Is<CancelReservationCommand>(c => c.Id == reservation1.Id), Arg.Any<CancellationToken>());
+        await _dispatcher.Received(1).SendAsync<CancelReservationResult>(
+            Arg.Is<CancelReservationCommand>(c => c.Id == reservation2.Id), Arg.Any<CancellationToken>());
     }
 
     [TestMethod]
-    public async Task HandleAsync_WhenOneReservationFailsToCancel_ReturnsFailure_AndNeverCallsTryCancelAsync()
+    public async Task HandleAsync_WhenClaimIsLost_ReturnsFailure_AndNeverTouchesAnyReservation()
     {
-        // Arrange
-        var order = CreatePendingOrder();
-        var cancelError = new ResultError("TEST", "reservation already expired");
+        // Arrange - the behavioural proof of claim-first: losing the order's
+        // own CAS must mean nothing downstream is ever touched
+        var reservation1 = CreateHeldReservation();
+        var reservation2 = CreateHeldReservation();
+        var order = CreatePendingOrder(reservation1, reservation2);
 
         _orderRepository.GetByIdAsync(order.Id, Arg.Any<CancellationToken>()).Returns(Success(order));
-        _dispatcher.SendAsync<CancelReservationResult>(
-                Arg.Is<CancelReservationCommand>(c => c.Id == ReservationId1), Arg.Any<CancellationToken>())
-            .Returns(Success(new CancelReservationResult(ReservationId1)));
-        _dispatcher.SendAsync<CancelReservationResult>(
-                Arg.Is<CancelReservationCommand>(c => c.Id == ReservationId2), Arg.Any<CancellationToken>())
-            .Returns(Failure<CancelReservationResult>(cancelError));
+        _orderRepository.TryCancelAsync(order.Id, Arg.Any<CancellationToken>()).Returns(Success(false));
 
         // Act
         var result = await _handler.HandleAsync(new CancelOrderCommand(order.Id));
 
         // Assert
         Assert.IsTrue(result.IsFailure);
-        CollectionAssert.Contains(result.Errors.ToList(), cancelError);
-        await _orderRepository.DidNotReceive().TryCancelAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+        CollectionAssert.Contains(result.Errors.ToList(), CancelOrderCommandHandler.Errors.OrderNoLongerPending);
+        await _reservationRepository.DidNotReceive().GetByIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+        await _dispatcher.DidNotReceive().SendAsync<CancelReservationResult>(Arg.Any<CancelReservationCommand>(), Arg.Any<CancellationToken>());
     }
 
     [TestMethod]
-    public async Task HandleAsync_WhenOrderIsNotPending_ReturnsFailureWithCannotCancelError_AndNeverCallsDispatcher()
+    public async Task HandleAsync_WhenOrderIsNotPending_ReturnsFailureWithCannotCancelError_AndNeverCallsTryCancelAsync()
     {
         // Arrange
-        var order = CreatePendingOrder();
+        var reservation = CreateHeldReservation();
+        var order = CreatePendingOrder(reservation);
         order.Complete();
         _orderRepository.GetByIdAsync(order.Id, Arg.Any<CancellationToken>()).Returns(Success(order));
 
@@ -93,24 +110,63 @@ public class CancelOrderCommandHandlerTests
         // Assert
         Assert.IsTrue(result.IsFailure);
         CollectionAssert.Contains(result.Errors.ToList(), Order.Errors.CannotCancel);
+        await _orderRepository.DidNotReceive().TryCancelAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
         await _dispatcher.DidNotReceive().SendAsync<CancelReservationResult>(Arg.Any<CancelReservationCommand>(), Arg.Any<CancellationToken>());
     }
 
     [TestMethod]
-    public async Task HandleAsync_WhenTryCancelAsyncFails_ReturnsFailureWithOrderUpdateFailedError()
+    public async Task HandleAsync_WhenOneReservationWasAlreadyCancelled_SkipsIt_AndStillSucceeds()
     {
         // Arrange
-        var order = CreatePendingOrder();
+        var alreadyCancelled = CreateHeldReservation();
+        alreadyCancelled.Cancel();
+        var stillHeld = CreateHeldReservation();
+        var order = CreatePendingOrder(alreadyCancelled, stillHeld);
+
         _orderRepository.GetByIdAsync(order.Id, Arg.Any<CancellationToken>()).Returns(Success(order));
-        _dispatcher.SendAsync<CancelReservationResult>(Arg.Any<CancelReservationCommand>(), Arg.Any<CancellationToken>())
-            .Returns(callInfo => Success(new CancelReservationResult(((CancelReservationCommand)callInfo[0]).Id)));
-        _orderRepository.TryCancelAsync(order.Id, Arg.Any<CancellationToken>()).Returns(Success(false));
+        _orderRepository.TryCancelAsync(order.Id, Arg.Any<CancellationToken>()).Returns(Success(true));
+        StubReservation(alreadyCancelled);
+        StubReservation(stillHeld);
+        StubDispatcherCancelsAnything();
+
+        // Act
+        var result = await _handler.HandleAsync(new CancelOrderCommand(order.Id));
+
+        // Assert
+        Assert.IsTrue(result.IsSuccess);
+        await _dispatcher.DidNotReceive().SendAsync<CancelReservationResult>(
+            Arg.Is<CancelReservationCommand>(c => c.Id == alreadyCancelled.Id), Arg.Any<CancellationToken>());
+        await _dispatcher.Received(1).SendAsync<CancelReservationResult>(
+            Arg.Is<CancelReservationCommand>(c => c.Id == stillHeld.Id), Arg.Any<CancellationToken>());
+    }
+
+    [TestMethod]
+    public async Task HandleAsync_WhenAReservationCancelFails_ReturnsFailure_AfterTheClaimWasMade()
+    {
+        // Arrange - proves the roll-forward contract: the claim already
+        // committed by the time a downstream cancellation can fail
+        var reservation1 = CreateHeldReservation();
+        var reservation2 = CreateHeldReservation();
+        var order = CreatePendingOrder(reservation1, reservation2);
+        var cancelError = new ResultError("TEST", "reservation already expired");
+
+        _orderRepository.GetByIdAsync(order.Id, Arg.Any<CancellationToken>()).Returns(Success(order));
+        _orderRepository.TryCancelAsync(order.Id, Arg.Any<CancellationToken>()).Returns(Success(true));
+        StubReservation(reservation1);
+        StubReservation(reservation2);
+        _dispatcher.SendAsync<CancelReservationResult>(
+                Arg.Is<CancelReservationCommand>(c => c.Id == reservation1.Id), Arg.Any<CancellationToken>())
+            .Returns(Success(new CancelReservationResult(reservation1.Id)));
+        _dispatcher.SendAsync<CancelReservationResult>(
+                Arg.Is<CancelReservationCommand>(c => c.Id == reservation2.Id), Arg.Any<CancellationToken>())
+            .Returns(Failure<CancelReservationResult>(cancelError));
 
         // Act
         var result = await _handler.HandleAsync(new CancelOrderCommand(order.Id));
 
         // Assert
         Assert.IsTrue(result.IsFailure);
-        CollectionAssert.Contains(result.Errors.ToList(), CancelOrderCommandHandler.Errors.OrderUpdateFailed);
+        CollectionAssert.Contains(result.Errors.ToList(), cancelError);
+        await _orderRepository.Received(1).TryCancelAsync(order.Id, Arg.Any<CancellationToken>());
     }
 }

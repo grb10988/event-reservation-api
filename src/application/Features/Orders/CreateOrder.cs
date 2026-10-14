@@ -24,11 +24,21 @@ public sealed class CreateOrderCommandHandler(
         CreateOrderCommand command,
         CancellationToken cancellationToken = default)
     {
-        var reservationChecks = await Task.WhenAll(
-            command.ReservationIds.Select(id => VerifyReservationAsync(id, command.CustomerId, cancellationToken)));
+        var now = timeProvider.GetUtcNow();
 
-        var result = await Combine(reservationChecks)
-            .Bind(() => Order.Create(command.CustomerId, command.ReservationIds, timeProvider))
+        var loaded = await Combine(command.ReservationIds
+            .Select(id => reservationRepository.GetByIdAsync(id, cancellationToken))
+            .ToArray());
+
+        var result = await loaded
+            .Ensure(reservations => reservations.All(r =>
+                    r.CustomerId == command.CustomerId &&
+                    r.Status == ReservationStatus.Held &&
+                    r.HoldExpiresAt > now),
+                Errors.ReservationNotOwnedOrHeld)
+            .Ensure(reservations => reservations.Select(r => r.EventId).Distinct().Count() == 1,
+                Errors.ReservationsSpanMultipleEvents)
+            .Bind(_ => Order.Create(command.CustomerId, command.ReservationIds, timeProvider))
             .Bind(order => orderRepository.AddAsync(order, cancellationToken))
             .Map(order => new CreateOrderResult(
                 order.Id,
@@ -40,20 +50,14 @@ public sealed class CreateOrderCommandHandler(
         return result;
     }
 
-    private async Task<Result> VerifyReservationAsync(Guid reservationId, Guid customerId, CancellationToken cancellationToken)
-    {
-        var result = await reservationRepository.GetByIdAsync(reservationId, cancellationToken)
-            .Ensure(reservation =>
-                reservation.CustomerId == customerId && reservation.Status == ReservationStatus.Held,
-                Errors.ReservationNotOwnedOrHeld);
-
-        return result;
-    }
-
     public static class Errors
     {
         private const string Context = "CREATE_ORDER";
+
         public static ResultError ReservationNotOwnedOrHeld =>
-            new(Context, "One or more reservations do not belong to this customer or are not currently held.", ErrorCategory.Conflict);
+            new(Context, "One or more reservations do not belong to this customer, are not currently held, or have expired.", ErrorCategory.Conflict);
+
+        public static ResultError ReservationsSpanMultipleEvents =>
+            new(Context, "All reservations in an order must belong to the same event.", ErrorCategory.Validation);
     }
 }

@@ -15,7 +15,7 @@ public class CreateReservationCommandHandlerTests
     private const decimal ValidPrice = 50.00m;
     private static readonly DateTimeOffset Now = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
-    private ISeatRepository _seatRepository = null!;
+    private IEventSeatRepository _eventSeatRepository = null!;
     private IReservationRepository _reservationRepository = null!;
     private FakeTimeProvider _timeProvider = null!;
     private CreateReservationCommandHandler _handler = null!;
@@ -23,10 +23,10 @@ public class CreateReservationCommandHandlerTests
     [TestInitialize]
     public void Setup()
     {
-        _seatRepository = Substitute.For<ISeatRepository>();
+        _eventSeatRepository = Substitute.For<IEventSeatRepository>();
         _reservationRepository = Substitute.For<IReservationRepository>();
         _timeProvider = new FakeTimeProvider(Now);
-        _handler = new CreateReservationCommandHandler(_reservationRepository, _seatRepository, _timeProvider);
+        _handler = new CreateReservationCommandHandler(_reservationRepository, _eventSeatRepository, _timeProvider);
     }
 
     // ============================================================
@@ -38,7 +38,7 @@ public class CreateReservationCommandHandlerTests
     {
         // Arrange
         var command = new CreateReservationCommand(SeatId, EventId, CustomerId, ValidPrice);
-        _seatRepository.TryHoldAsync(SeatId, Arg.Any<CancellationToken>()).Returns(Success(true));
+        _eventSeatRepository.TryHoldAsync(SeatId, EventId, Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Success(true));
         _reservationRepository.AddAsync(Arg.Any<Reservation>(), Arg.Any<CancellationToken>())
             .Returns(callInfo => Success(callInfo.Arg<Reservation>()));
 
@@ -49,15 +49,32 @@ public class CreateReservationCommandHandlerTests
         Assert.IsTrue(result.IsSuccess);
         Assert.AreEqual(SeatId, result.Value.SeatId);
         Assert.AreEqual(ReservationStatus.Held, result.Value.Status);
-        await _seatRepository.DidNotReceive().TryReleaseAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+        await _eventSeatRepository.DidNotReceive().TryReleaseAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }
 
     [TestMethod]
-    public async Task HandleAsync_WhenSeatCannotBeHeld_ReturnsFailureWithSeatNotAvailableError_AndNeverCallsAddAsync()
+    public async Task HandleAsync_WhenSeatHolds_UsesTheReservationIdAsTheFencingToken()
     {
         // Arrange
         var command = new CreateReservationCommand(SeatId, EventId, CustomerId, ValidPrice);
-        _seatRepository.TryHoldAsync(SeatId, Arg.Any<CancellationToken>()).Returns(Success(false));
+        _eventSeatRepository.TryHoldAsync(SeatId, EventId, Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Success(true));
+        _reservationRepository.AddAsync(Arg.Any<Reservation>(), Arg.Any<CancellationToken>())
+            .Returns(callInfo => Success(callInfo.Arg<Reservation>()));
+
+        // Act
+        var result = await _handler.HandleAsync(command);
+
+        // Assert
+        Assert.IsTrue(result.IsSuccess);
+        await _eventSeatRepository.Received(1).TryHoldAsync(SeatId, EventId, result.Value.Id, Arg.Any<CancellationToken>());
+    }
+
+    [TestMethod]
+    public async Task HandleAsync_WhenSeatCannotBeHeld_ReturnsFailureWithSeatNotAvailableError_AndNeverCallsAddAsyncOrTryReleaseAsync()
+    {
+        // Arrange
+        var command = new CreateReservationCommand(SeatId, EventId, CustomerId, ValidPrice);
+        _eventSeatRepository.TryHoldAsync(SeatId, EventId, Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Success(false));
 
         // Act
         var result = await _handler.HandleAsync(command);
@@ -66,20 +83,39 @@ public class CreateReservationCommandHandlerTests
         Assert.IsTrue(result.IsFailure);
         CollectionAssert.Contains(result.Errors.ToList(), CreateReservationCommandHandler.Errors.SeatNotAvailable);
         await _reservationRepository.DidNotReceive().AddAsync(Arg.Any<Reservation>(), Arg.Any<CancellationToken>());
+        await _eventSeatRepository.DidNotReceive().TryReleaseAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+    }
+
+    [TestMethod]
+    public async Task HandleAsync_WhenInputIsInvalid_ReturnsFailure_AndNeverTouchesTheSeat()
+    {
+        // Arrange - validated before acquiring shared state: no hold attempt,
+        // no compensating release
+        var command = new CreateReservationCommand(SeatId, Guid.Empty, CustomerId, ValidPrice);
+
+        // Act
+        var result = await _handler.HandleAsync(command);
+
+        // Assert
+        Assert.IsTrue(result.IsFailure);
+        CollectionAssert.Contains(result.Errors.ToList(), Reservation.Errors.EmptyEventId);
+        await _eventSeatRepository.DidNotReceive().TryHoldAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }
 
     [TestMethod]
     public async Task HandleAsync_WhenReservationInsertFails_CompensatesByReleasingTheSeat_AndPropagatesTheOriginalError()
     {
-        // Arrange - this is the money test: proves TapError's compensation
-        // actually fires, and that it's the insert's own error that surfaces,
-        // not something masked by the compensating release call
+        // Arrange - the money test: proves TapError's compensation actually
+        // fires, releases with the same fencing token used to acquire, and
+        // that it's the insert's own error that surfaces
         var command = new CreateReservationCommand(SeatId, EventId, CustomerId, ValidPrice);
         var insertError = new ResultError("TEST", "insert failed");
+        Guid heldWith = Guid.Empty;
 
-        _seatRepository.TryHoldAsync(SeatId, Arg.Any<CancellationToken>()).Returns(Success(true));
+        _eventSeatRepository.TryHoldAsync(SeatId, EventId, Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(callInfo => { heldWith = callInfo.ArgAt<Guid>(2); return Success(true); });
         _reservationRepository.AddAsync(Arg.Any<Reservation>(), Arg.Any<CancellationToken>()).Returns(Failure<Reservation>(insertError));
-        _seatRepository.TryReleaseAsync(SeatId, Arg.Any<CancellationToken>()).Returns(Success(true));
+        _eventSeatRepository.TryReleaseAsync(SeatId, EventId, Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Success(true));
 
         // Act
         var result = await _handler.HandleAsync(command);
@@ -87,7 +123,7 @@ public class CreateReservationCommandHandlerTests
         // Assert
         Assert.IsTrue(result.IsFailure);
         CollectionAssert.Contains(result.Errors.ToList(), insertError);
-        await _seatRepository.Received(1).TryReleaseAsync(SeatId, Arg.Any<CancellationToken>());
+        await _eventSeatRepository.Received(1).TryReleaseAsync(SeatId, EventId, heldWith, Arg.Any<CancellationToken>());
     }
 
     [TestMethod]
@@ -97,7 +133,7 @@ public class CreateReservationCommandHandlerTests
         var customDuration = TimeSpan.FromMinutes(30);
         var command = new CreateReservationCommand(SeatId, EventId, CustomerId, ValidPrice, customDuration);
 
-        _seatRepository.TryHoldAsync(SeatId, Arg.Any<CancellationToken>()).Returns(Success(true));
+        _eventSeatRepository.TryHoldAsync(SeatId, EventId, Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Success(true));
         _reservationRepository.AddAsync(Arg.Any<Reservation>(), Arg.Any<CancellationToken>())
             .Returns(callInfo => Success(callInfo.Arg<Reservation>()));
 

@@ -8,19 +8,27 @@ public sealed record ConfirmReservationCommand(Guid Id) : ICommand<ConfirmReserv
 
 public sealed class ConfirmReservationCommandHandler(
     IReservationRepository reservationRepository,
-    ISeatRepository seatRepository)
+    IEventSeatRepository eventSeatRepository,
+    TimeProvider timeProvider)
     : ICommandHandler<ConfirmReservationCommand, ConfirmReservationResult>
 {
     public Task<Result<ConfirmReservationResult>> HandleAsync(
         ConfirmReservationCommand command,
         CancellationToken cancellationToken = default)
     {
+        var now = timeProvider.GetUtcNow();
+
         var result = reservationRepository.GetByIdAsync(command.Id, cancellationToken)
             .Bind(reservation => reservation.Confirm())
-            .Bind(reservation => reservationRepository.TryConfirmAsync(reservation.Id, cancellationToken)
+            .Ensure(reservation => reservation.HoldExpiresAt > now, Errors.HoldExpired)
+            .Bind(reservation => eventSeatRepository.TryReserveAsync(
+                    reservation.SeatId,
+                    reservation.EventId,
+                    reservation.Id,
+                    cancellationToken)
+                .Ensure(reserved => reserved, Errors.SeatNotHeldByReservation)
+                .Bind(_ => reservationRepository.TryConfirmAsync(reservation.Id, cancellationToken))
                 .Ensure(confirmed => confirmed, Errors.ReservationNotHeld)
-                .Bind(_ => seatRepository.TryReserveAsync(reservation.SeatId, cancellationToken))
-                .Ensure(reserved => reserved, Errors.SeatCouldNotBeReserved)
                 .Map(_ => new ConfirmReservationResult(reservation.Id)));
 
         return result;
@@ -33,7 +41,10 @@ public sealed class ConfirmReservationCommandHandler(
         public static ResultError ReservationNotHeld =>
             new(Context, "The requested reservation is not currently held and cannot be confirmed.", ErrorCategory.Conflict);
 
-        public static ResultError SeatCouldNotBeReserved =>
-            new(Context, "The reservation was confirmed, but the associated seat could not be transitions to Reserved.", ErrorCategory.Conflict);
+        public static ResultError HoldExpired =>
+            new(Context, "The hold on this reservation has expired.", ErrorCategory.Conflict);
+
+        public static ResultError SeatNotHeldByReservation =>
+            new(Context, "The seat is no longer held by this reservation.", ErrorCategory.Conflict);
     }
 }

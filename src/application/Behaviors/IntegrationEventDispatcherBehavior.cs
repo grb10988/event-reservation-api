@@ -66,7 +66,7 @@ public sealed class IntegrationEventDispatcherMetrics(IIntegrationEventDispatche
         Counter<long> Exceptions,
         Histogram<double> duration) Instruments =
         PipelineMetrics.CreateInstruments(
-            "EventReservation.Appplication.IntegrationEvents.Consumers",
+            "EventReservation.Application.IntegrationEvents.Consumers",
             "integration_event_consumers");
 
     public async Task<Result> DispatchAsync<TEvent>(TEvent @event, CancellationToken cancellationToken = default)
@@ -81,9 +81,7 @@ public sealed class IntegrationEventDispatcherMetrics(IIntegrationEventDispatche
             var result = await inner.DispatchAsync(@event, cancellationToken);
             outcome = result.IsSuccess ? "success" : "failure";
 
-            Instruments.Total.Add(1,
-                new KeyValuePair<string, object?>("event", name),
-                new KeyValuePair<string, object?>("outcome", outcome));
+            Instruments.Total.Add(1, PipelineMetrics.BuildOutcomeTags("event", name, outcome, result));
 
             return result;
         }
@@ -91,9 +89,7 @@ public sealed class IntegrationEventDispatcherMetrics(IIntegrationEventDispatche
         {
             outcome = "exception";
 
-            Instruments.Exceptions.Add(1,
-                new KeyValuePair<string, object?>("event", name),
-                new KeyValuePair<string, object?>("exception_type", ex.GetType().Name));
+            Instruments.Exceptions.Add(1, PipelineMetrics.BuildExceptionTags("event", name, ex));
 
             throw;
         }
@@ -101,8 +97,7 @@ public sealed class IntegrationEventDispatcherMetrics(IIntegrationEventDispatche
         {
             Instruments.duration.Record(
                 stopwatch.Elapsed.TotalMilliseconds,
-                new KeyValuePair<string, object?>("event", name),
-                new KeyValuePair<string, object?>("outcome", outcome));
+                PipelineMetrics.BuildDurationTags("event", name, outcome));
         }
     }
 }

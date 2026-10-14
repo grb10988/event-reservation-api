@@ -11,12 +11,12 @@ INSERT INTO venues (id, name, address, capacity)
 VALUES
     ('01b8dac5-b7e8-7001-a000-000000000001', 'City Amphitheater', '123 Main St, Springfield', 500);
 
-INSERT INTO seats (id, venue_id, section, row, number, status)
+INSERT INTO seats (id, venue_id, section, row, number)
 VALUES
-    ('01b8dac5-bbd0-7002-a000-000000000002', '01b8dac5-b7e8-7001-a000-000000000001', 'A', 1, 1, 'Available'),
-    ('01b8dac5-bfb8-7003-a000-000000000003', '01b8dac5-b7e8-7001-a000-000000000001', 'A', 1, 2, 'Available'),
-    ('01b8dac5-c3a0-7004-a000-000000000004', '01b8dac5-b7e8-7001-a000-000000000001', 'A', 2, 1, 'Available'),
-    ('01b8dac5-c788-7005-a000-000000000005', '01b8dac5-b7e8-7001-a000-000000000001', 'B', 1, 1, 'Available');
+    ('01b8dac5-bbd0-7002-a000-000000000002', '01b8dac5-b7e8-7001-a000-000000000001', 'A', 1, 1),
+    ('01b8dac5-bfb8-7003-a000-000000000003', '01b8dac5-b7e8-7001-a000-000000000001', 'A', 1, 2),
+    ('01b8dac5-c3a0-7004-a000-000000000004', '01b8dac5-b7e8-7001-a000-000000000001', 'A', 2, 1),
+    ('01b8dac5-c788-7005-a000-000000000005', '01b8dac5-b7e8-7001-a000-000000000001', 'B', 1, 1);
 
 INSERT INTO events (id, venue_id, name, description, start_time, end_time, ticket_price, status)
 VALUES
@@ -30,6 +30,19 @@ VALUES
     50.00,
     'Published'
 );
+
+-- The seeded event is Published, so its seats must already be provisioned as
+-- sellable inventory - this mirrors the bulk insert PublishEventCommandHandler
+-- runs at runtime (INSERT ... SELECT FROM seats, ON CONFLICT DO NOTHING).
+INSERT INTO event_seats (event_id, seat_id, status)
+SELECT
+    '01b8dac5-cb70-7006-a000-000000000006',
+    s.id,
+    'Available'
+FROM
+    seats AS s
+WHERE
+    s.venue_id = '01b8dac5-b7e8-7001-a000-000000000001';
 
 INSERT INTO customers (id, first_name, last_name, email)
 VALUES

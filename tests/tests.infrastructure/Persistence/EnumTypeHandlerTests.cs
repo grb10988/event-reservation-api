@@ -8,12 +8,12 @@ namespace EventReservation.Tests.Infrastructure.Persistence;
 [TestClass]
 public class EnumTypeHandlerTests
 {
-    private EnumTypeHandler<SeatStatus> _handler = null!;
+    private EnumTypeHandler<EventSeatStatus> _handler = null!;
 
     [TestInitialize]
     public void Setup()
     {
-        _handler = new EnumTypeHandler<SeatStatus>();
+        _handler = new EnumTypeHandler<EventSeatStatus>();
     }
 
     // ============================================================
@@ -27,7 +27,7 @@ public class EnumTypeHandlerTests
         var parameter = Substitute.For<IDbDataParameter>();
 
         // Act
-        _handler.SetValue(parameter, SeatStatus.Held);
+        _handler.SetValue(parameter, EventSeatStatus.Held);
 
         // Assert
         Assert.AreEqual(DbType.String, parameter.DbType);
@@ -45,7 +45,7 @@ public class EnumTypeHandlerTests
         var result = _handler.Parse("Reserved");
 
         // Assert
-        Assert.AreEqual(SeatStatus.Reserved, result);
+        Assert.AreEqual(EventSeatStatus.Reserved, result);
     }
 
     [TestMethod]
@@ -68,10 +68,10 @@ public class EnumTypeHandlerTests
         var parameter = Substitute.For<IDbDataParameter>();
 
         // Act
-        _handler.SetValue(parameter, SeatStatus.Available);
+        _handler.SetValue(parameter, EventSeatStatus.Available);
         var result = _handler.Parse(parameter.Value!);
 
         // Assert
-        Assert.AreEqual(SeatStatus.Available, result);
+        Assert.AreEqual(EventSeatStatus.Available, result);
     }
 }

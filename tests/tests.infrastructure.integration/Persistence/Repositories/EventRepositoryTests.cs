@@ -9,7 +9,7 @@ namespace EventReservation.Tests.Infrastructure.Integration.Persistence.Reposito
 [TestClass]
 public class EventRepositoryTests : IntegrationTestBase
 {
-    private static readonly DateTimeOffset Now = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+    private static readonly DateTimeOffset Now = TruncateToSeconds(DateTimeOffset.UtcNow);
 
     private IVenueRepository _venueRepository = null!;
     private IEventRepository _eventRepository = null!;
@@ -263,5 +263,77 @@ public class EventRepositoryTests : IntegrationTestBase
         // Assert
         Assert.IsTrue(result.IsSuccess, string.Join("; ", result.ToFailureMessages()));
         Assert.IsFalse(result.Value);
+    }
+
+    // ============================================================
+    // TryPublishAsync / TryCancelAsync concurrency
+    // ============================================================
+
+    [TestMethod]
+    public async Task TryPublishAsync_WhenTwentyFiveRequestsRaceForTheSameEvent_ExactlyOneSucceeds()
+    {
+        // Arrange
+        var venueId = await SeedVenueAsync();
+        var evt = await SeedDraftEventAsync(venueId);
+
+        // Act
+        var results = await Task.WhenAll(
+            Enumerable.Range(0, 25).Select(_ => _eventRepository.TryPublishAsync(evt.Id)));
+
+        // Assert
+        Assert.IsTrue(results.All(r => r.IsSuccess));
+        Assert.AreEqual(1, results.Count(r => r.Value));
+
+        var finalState = await _eventRepository.GetByIdAsync(evt.Id);
+        Assert.IsNotNull(finalState.Value);
+        Assert.AreEqual(EventStatus.Published, finalState.Value.Status);
+    }
+
+    [TestMethod]
+    public async Task TryCancelAsync_WhenTwentyFiveRequestsRaceForTheSameEvent_ExactlyOneSucceeds()
+    {
+        // Arrange
+        var venueId = await SeedVenueAsync();
+        var evt = await SeedDraftEventAsync(venueId);
+
+        // Act
+        var results = await Task.WhenAll(
+            Enumerable.Range(0, 25).Select(_ => _eventRepository.TryCancelAsync(evt.Id)));
+
+        // Assert
+        Assert.IsTrue(results.All(r => r.IsSuccess));
+        Assert.AreEqual(1, results.Count(r => r.Value));
+
+        var finalState = await _eventRepository.GetByIdAsync(evt.Id);
+        Assert.IsNotNull(finalState.Value);
+        Assert.AreEqual(EventStatus.Cancelled, finalState.Value.Status);
+    }
+
+    [TestMethod]
+    public async Task PublishAndCancel_WhenRacedOnTheSameDraftEvent_CancelAlwaysWins()
+    {
+        // Arrange - TryCancelAsync accepts both Draft and Published as a
+        // source state (cancelling an event you just published is valid),
+        // so this isn't a true mutual-exclusion race: cancel either lands
+        // directly on the Draft row, or chases down the Published row that
+        // publish just produced. Publish's own result is genuinely
+        // non-deterministic depending on which transaction wins the row
+        // lock, but the terminal state is always Cancelled.
+        var venueId = await SeedVenueAsync();
+        var evt = await SeedDraftEventAsync(venueId);
+
+        // Act
+        var results = await Task.WhenAll(
+            _eventRepository.TryPublishAsync(evt.Id),
+            _eventRepository.TryCancelAsync(evt.Id));
+        var cancelResult = results[1];
+
+        // Assert
+        Assert.IsTrue(results.All(r => r.IsSuccess));
+        Assert.IsTrue(cancelResult.Value);
+
+        var finalState = await _eventRepository.GetByIdAsync(evt.Id);
+        Assert.IsNotNull(finalState.Value);
+        Assert.AreEqual(EventStatus.Cancelled, finalState.Value.Status);
     }
 }

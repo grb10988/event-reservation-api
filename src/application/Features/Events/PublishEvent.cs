@@ -1,12 +1,15 @@
 using EventReservation.Application.Abstractions.Requests;
 using EventReservation.Application.Interfaces;
+using EventReservation.Domain.Models;
 
 namespace EventReservation.Application.Features.Events;
 
 public sealed record PublishEventResult(Guid Id);
 public sealed record PublishEventCommand(Guid Id) : ICommand<PublishEventResult>;
 
-public sealed class PublishEventCommandHandler(IEventRepository eventRepository)
+public sealed class PublishEventCommandHandler(
+    IEventRepository eventRepository,
+    IEventSeatRepository eventSeatRepository)
     : ICommandHandler<PublishEventCommand, PublishEventResult>
 {
     public Task<Result<PublishEventResult>> HandleAsync(
@@ -15,9 +18,17 @@ public sealed class PublishEventCommandHandler(IEventRepository eventRepository)
     {
         var result = eventRepository.GetByIdAsync(command.Id, cancellationToken)
             .Bind(evt => evt.Publish())
-            .Bind(evt => eventRepository.TryPublishAsync(evt.Id, cancellationToken)
-                .Ensure(published => published, Errors.EventNotDraft)
-                .Map(_ => new PublishEventResult(evt.Id)));
+            .Bind(evt => ProvisionAndPublishAsync(evt, cancellationToken));
+
+        return result;
+    }
+
+    private Task<Result<PublishEventResult>> ProvisionAndPublishAsync(Event evt, CancellationToken cancellationToken)
+    {
+        var result = eventSeatRepository.ProvisionAsync(evt.Id, evt.VenueId, cancellationToken)
+            .Bind(() => eventRepository.TryPublishAsync(evt.Id, cancellationToken))
+            .Ensure(published => published, Errors.EventNotDraft)
+            .Map(_ => new PublishEventResult(evt.Id));
 
         return result;
     }

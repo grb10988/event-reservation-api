@@ -9,6 +9,9 @@ public abstract class IntegrationTestBase
 {
     protected IDbConnectionFactory ConnectionFactory { get; private set; } = null!;
 
+    protected static DateTimeOffset TruncateToSeconds(DateTimeOffset value) =>
+        new(value.Year, value.Month, value.Day, value.Hour, value.Minute, value.Second, value.Offset);
+
     [TestInitialize]
     public void BaseSetup()
     {
@@ -22,7 +25,17 @@ public abstract class IntegrationTestBase
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
         command.CommandTimeout = 30;
-        command.CommandText = "TRUNCATE TABLE order_reservations, orders, reservations, seats, events, customers, venues RESTART IDENTITY CASCADE;";
+        command.CommandText = @"
+            TRUNCATE TABLE
+                order_reservations,
+                orders,
+                reservations,
+                event_seats,
+                seats,
+                events,
+                customers,
+                venues
+                RESTART IDENTITY CASCADE;";
         await command.ExecuteNonQueryAsync();
     }
 

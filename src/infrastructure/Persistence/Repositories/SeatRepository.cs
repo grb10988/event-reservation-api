@@ -12,7 +12,6 @@ internal sealed class SeatRow
     public string Section { get; init; } = string.Empty;
     public int Row { get; init; }
     public int Number { get; init; }
-    public SeatStatus Status { get; init; }
 }
 
 public sealed class SeatRepository(
@@ -30,8 +29,7 @@ public sealed class SeatRepository(
                         s.venue_id AS VenueId,
                         s.section AS Section,
                         s.row AS Row,
-                        s.number AS Number,
-                        s.status AS Status
+                        s.number AS Number
                     FROM
                         seats AS s
                     WHERE
@@ -49,8 +47,7 @@ public sealed class SeatRepository(
                 rows[0].VenueId,
                 rows[0].Section,
                 rows[0].Row,
-                rows[0].Number,
-                rows[0].Status)));
+                rows[0].Number)));
 
     public Task<Result<IReadOnlyList<Seat>>> GetByVenueIdAsync(
         Guid venueId,
@@ -65,8 +62,7 @@ public sealed class SeatRepository(
                         s.venue_id AS VenueId,
                         s.section AS Section,
                         s.row AS Row,
-                        s.number AS Number,
-                        s.status AS Status
+                        s.number AS Number
                     FROM
                         seats AS s
                     WHERE
@@ -84,8 +80,7 @@ public sealed class SeatRepository(
                 r.VenueId,
                 r.Section,
                 r.Row,
-                r.Number,
-                r.Status)).ToList();
+                r.Number)).ToList();
         });
 
     public Task<Result<Seat>> AddAsync(Seat seat, CancellationToken cancellationToken = default) =>
@@ -100,8 +95,7 @@ public sealed class SeatRepository(
                         venue_id,
                         section,
                         row,
-                        number,
-                        status
+                        number
                     )
                     VALUES
                     (
@@ -109,8 +103,7 @@ public sealed class SeatRepository(
                         @VenueId,
                         @Section,
                         @Row,
-                        @Number,
-                        @Status
+                        @Number
                     )
                     ",
                     new
@@ -119,90 +112,10 @@ public sealed class SeatRepository(
                         seat.VenueId,
                         seat.Section,
                         seat.Row,
-                        seat.Number,
-                        Status = seat.Status.ToString()
+                        seat.Number
                     },
                     cancellationToken: cancellationToken));
 
             return seat;
-        });
-
-    public Task<Result<bool>> TryHoldAsync(Guid seatId, CancellationToken cancellationToken = default) =>
-        RepositoryOperations.ExecuteAsync(connectionFactory, logger, async connection =>
-        {
-            var rowsAffected = await connection.ExecuteAsync(
-                new CommandDefinition(
-                    @"
-                    UPDATE
-                        seats
-                    SET
-                        status = @NewStatus
-                    WHERE
-                        id = @Id AND
-                        status = @RequiredStatus
-                    ",
-                    new
-                    {
-                        Id = seatId,
-                        NewStatus = SeatStatus.Held.ToString(),
-                        RequiredStatus = SeatStatus.Available.ToString()
-                    },
-                    cancellationToken: cancellationToken));
-
-            return rowsAffected == 1;
-        });
-
-    public Task<Result<bool>> TryReserveAsync(Guid seatId, CancellationToken cancellationToken = default) =>
-        RepositoryOperations.ExecuteAsync(connectionFactory, logger, async connection =>
-        {
-            var rowsAffected = await connection.ExecuteAsync(
-                new CommandDefinition(
-                    @"
-                    UPDATE
-                        seats
-                    SET
-                        status = @NewStatus
-                    WHERE
-                        id = @Id AND
-                        status = @RequiredStatus
-                    ",
-                    new
-                    {
-                        Id = seatId,
-                        NewStatus = SeatStatus.Reserved.ToString(),
-                        RequiredStatus = SeatStatus.Held.ToString()
-                    },
-                    cancellationToken: cancellationToken));
-
-            return rowsAffected == 1;
-        });
-
-    public Task<Result<bool>> TryReleaseAsync(Guid seatId, CancellationToken cancellationToken = default) =>
-        RepositoryOperations.ExecuteAsync(connectionFactory, logger, async connection =>
-        {
-            var rowsAffected = await connection.ExecuteAsync(
-                new CommandDefinition(
-                    @"
-                    UPDATE
-                        seats
-                    SET
-                        status = @NewStatus
-                    WHERE
-                        id = @Id AND
-                        status = ANY(@RequiredStatus)
-                    ",
-                    new
-                    {
-                        Id = seatId,
-                        NewStatus = SeatStatus.Available.ToString(),
-                        RequiredStatus = new[]
-                        {
-                            SeatStatus.Held.ToString(),
-                            SeatStatus.Reserved.ToString()
-                        }
-                    },
-                    cancellationToken: cancellationToken));
-
-            return rowsAffected == 1;
         });
 }

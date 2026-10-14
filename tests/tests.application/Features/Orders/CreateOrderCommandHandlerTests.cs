@@ -28,8 +28,10 @@ public class CreateOrderCommandHandlerTests
         _handler = new CreateOrderCommandHandler(_orderRepository, _reservationRepository, _timeProvider);
     }
 
+    private static readonly Guid EventId = Guid.NewGuid();
+
     private Reservation CreateHeldReservationFor(Guid customerId) =>
-        Reservation.Create(Guid.NewGuid(), Guid.NewGuid(), customerId, 50.00m, _timeProvider).Value!;
+        Reservation.Create(Guid.NewGuid(), EventId, customerId, 50.00m, _timeProvider).Value!;
 
     // ============================================================
     // HandleAsync
@@ -118,5 +120,25 @@ public class CreateOrderCommandHandlerTests
         Assert.IsTrue(result.IsFailure);
         await _reservationRepository.Received(1).GetByIdAsync(reservation1.Id, Arg.Any<CancellationToken>());
         await _reservationRepository.Received(1).GetByIdAsync(reservation2.Id, Arg.Any<CancellationToken>());
+    }
+
+    [TestMethod]
+    public async Task HandleAsync_WhenReservationsSpanMultipleEvents_ReturnsFailureWithReservationsSpanMultipleEventsError_AndNeverCallsAddAsync()
+    {
+        // Arrange
+        var reservation1 = CreateHeldReservationFor(CustomerId);
+        var reservation2 = Reservation.Create(Guid.NewGuid(), Guid.NewGuid(), CustomerId, 50.00m, _timeProvider).Value!; // different event
+        var command = new CreateOrderCommand(CustomerId, [reservation1.Id, reservation2.Id]);
+
+        _reservationRepository.GetByIdAsync(reservation1.Id, Arg.Any<CancellationToken>()).Returns(Success(reservation1));
+        _reservationRepository.GetByIdAsync(reservation2.Id, Arg.Any<CancellationToken>()).Returns(Success(reservation2));
+
+        // Act
+        var result = await _handler.HandleAsync(command);
+
+        // Assert
+        Assert.IsTrue(result.IsFailure);
+        CollectionAssert.Contains(result.Errors.ToList(), CreateOrderCommandHandler.Errors.ReservationsSpanMultipleEvents);
+        await _orderRepository.DidNotReceive().AddAsync(Arg.Any<Order>(), Arg.Any<CancellationToken>());
     }
 }

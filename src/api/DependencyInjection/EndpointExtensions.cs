@@ -9,7 +9,6 @@ public static class EndpointExtensions
         var apiGroup = app.MapGroup("/api");
 
         apiGroup.MapVenueEndpoints();
-        apiGroup.MapSeatEndpoints();
         apiGroup.MapEventEndpoints();
         apiGroup.MapReservationEndpoints();
         apiGroup.MapOrderEndpoints();

@@ -26,7 +26,6 @@ public class SeatTests
         Assert.AreEqual(ValidSection, result.Value.Section);
         Assert.AreEqual(ValidRow, result.Value.Row);
         Assert.AreEqual(ValidNumber, result.Value.Number);
-        Assert.AreEqual(SeatStatus.Available, result.Value.Status);
         Assert.AreNotEqual(Guid.Empty, result.Value.Id);
     }
 
@@ -106,162 +105,6 @@ public class SeatTests
     }
 
     // ============================================================
-    // Hold
-    // ============================================================
-
-    [TestMethod]
-    public void Hold_WhenAvailable_ReturnsSuccessWithHeldStatus()
-    {
-        // Arrange
-        var seat = Seat.Create(ValidVenueId, ValidSection, ValidRow, ValidNumber).Value;
-        Assert.IsNotNull(seat);
-
-        // Act
-        var result = seat.Hold();
-
-        // Assert
-        Assert.IsTrue(result.IsSuccess);
-        Assert.AreEqual(SeatStatus.Held, result.Value.Status);
-    }
-
-    [TestMethod]
-    public void Hold_WhenAlreadyHeld_ReturnsFailureWithCannotHoldError()
-    {
-        // Arrange
-        var seat = Seat.Create(ValidVenueId, ValidSection, ValidRow, ValidNumber).Value;
-        Assert.IsNotNull(seat);
-        seat.Hold();
-
-        // Act
-        var result = seat.Hold();
-
-        // Assert
-        Assert.IsTrue(result.IsFailure);
-        CollectionAssert.Contains(result.Errors.ToList(), Seat.Errors.CannotHold);
-    }
-
-    [TestMethod]
-    public void Hold_WhenReserved_ReturnsFailureWithCannotHoldError()
-    {
-        // Arrange
-        var seat = Seat.Create(ValidVenueId, ValidSection, ValidRow, ValidNumber).Value;
-        Assert.IsNotNull(seat);
-        seat.Hold();
-        seat.Reserve();
-
-        // Act
-        var result = seat.Hold();
-
-        // Assert
-        Assert.IsTrue(result.IsFailure);
-        CollectionAssert.Contains(result.Errors.ToList(), Seat.Errors.CannotHold);
-    }
-
-    // ============================================================
-    // Reserve
-    // ============================================================
-
-    [TestMethod]
-    public void Reserve_WhenHeld_ReturnsSuccessWithReservedStatus()
-    {
-        // Arrange
-        var seat = Seat.Create(ValidVenueId, ValidSection, ValidRow, ValidNumber).Value;
-        Assert.IsNotNull(seat);
-        seat.Hold();
-
-        // Act
-        var result = seat.Reserve();
-
-        // Assert
-        Assert.IsTrue(result.IsSuccess);
-        Assert.AreEqual(SeatStatus.Reserved, result.Value.Status);
-    }
-
-    [TestMethod]
-    public void Reserve_WhenAvailable_ReturnsFailureWithCannotReserveError()
-    {
-        // Arrange
-        var seat = Seat.Create(ValidVenueId, ValidSection, ValidRow, ValidNumber).Value;
-        Assert.IsNotNull(seat);
-
-        // Act
-        var result = seat.Reserve();
-
-        // Assert
-        Assert.IsTrue(result.IsFailure);
-        CollectionAssert.Contains(result.Errors.ToList(), Seat.Errors.CannotReserve);
-    }
-
-    [TestMethod]
-    public void Reserve_WhenAlreadyReserved_ReturnsFailureWithCannotReserveError()
-    {
-        // Arrange
-        var seat = Seat.Create(ValidVenueId, ValidSection, ValidRow, ValidNumber).Value;
-        Assert.IsNotNull(seat);
-        seat.Hold();
-        seat.Reserve();
-
-        // Act
-        var result = seat.Reserve();
-
-        // Assert
-        Assert.IsTrue(result.IsFailure);
-        CollectionAssert.Contains(result.Errors.ToList(), Seat.Errors.CannotReserve);
-    }
-
-    // ============================================================
-    // Release
-    // ============================================================
-
-    [TestMethod]
-    public void Release_WhenHeld_ReturnsSuccessWithAvailableStatus()
-    {
-        // Arrange
-        var seat = Seat.Create(ValidVenueId, ValidSection, ValidRow, ValidNumber).Value;
-        Assert.IsNotNull(seat);
-        seat.Hold();
-
-        // Act
-        var result = seat.Release();
-
-        // Assert
-        Assert.IsTrue(result.IsSuccess);
-        Assert.AreEqual(SeatStatus.Available, result.Value.Status);
-    }
-
-    [TestMethod]
-    public void Release_WhenReserved_ReturnsSuccessWithAvailableStatus()
-    {
-        // Arrange
-        var seat = Seat.Create(ValidVenueId, ValidSection, ValidRow, ValidNumber).Value;
-        Assert.IsNotNull(seat);
-        seat.Hold();
-        seat.Reserve();
-
-        // Act
-        var result = seat.Release();
-
-        // Assert
-        Assert.IsTrue(result.IsSuccess);
-        Assert.AreEqual(SeatStatus.Available, result.Value.Status);
-    }
-
-    [TestMethod]
-    public void Release_WhenAvailable_ReturnsFailureWithCannotReleaseError()
-    {
-        // Arrange
-        var seat = Seat.Create(ValidVenueId, ValidSection, ValidRow, ValidNumber).Value;
-        Assert.IsNotNull(seat);
-
-        // Act
-        var result = seat.Release();
-
-        // Assert
-        Assert.IsTrue(result.IsFailure);
-        CollectionAssert.Contains(result.Errors.ToList(), Seat.Errors.CannotRelease);
-    }
-
-    // ============================================================
     // Rehydrate
     // ============================================================
 
@@ -272,7 +115,7 @@ public class SeatTests
         var id = Guid.NewGuid();
 
         // Act
-        var seat = Seat.Rehydrate(id, ValidVenueId, ValidSection, ValidRow, ValidNumber, SeatStatus.Held);
+        var seat = Seat.Rehydrate(id, ValidVenueId, ValidSection, ValidRow, ValidNumber);
 
         // Assert
         Assert.AreEqual(id, seat.Id);
@@ -280,6 +123,5 @@ public class SeatTests
         Assert.AreEqual(ValidSection, seat.Section);
         Assert.AreEqual(ValidRow, seat.Row);
         Assert.AreEqual(ValidNumber, seat.Number);
-        Assert.AreEqual(SeatStatus.Held, seat.Status);
     }
 }

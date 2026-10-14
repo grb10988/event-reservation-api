@@ -41,25 +41,6 @@ Content-Type: application/json
 }
 
 // ============================================================
-// Seats
-// NOTE: there is no Create Seat endpoint - seats are seeded
-// administratively (see database/seed.sql), not created via the API.
-// Every request below acts on seeded seat data.
-// ============================================================
-
-###
-// Hold a seeded seat - requires it to currently be Available
-POST {{HostAddress}}/api/seats/01b8dac5-bbd0-7002-a000-000000000002/hold
-
-###
-// Reserve the same seat - requires it to currently be Held
-POST {{HostAddress}}/api/seats/01b8dac5-bbd0-7002-a000-000000000002/reserve
-
-###
-// Release the same seat - valid from Held or Reserved
-POST {{HostAddress}}/api/seats/01b8dac5-bbd0-7002-a000-000000000002/release
-
-// ============================================================
 // Events
 // ============================================================
 
@@ -145,8 +126,8 @@ Content-Type: application/json
 }
 
 // ============================================================
-// Full workflow: create everything needed, hold a seat, reserve
-// it, then create and complete an order - each step's IDs are
+// Full workflow: create everything needed, reserve a seat,
+// and then create and complete an order - each step's IDs are
 // captured automatically from the previous response.
 // ============================================================
 
@@ -179,11 +160,8 @@ Content-Type: application/json
 POST {{HostAddress}}/api/events/{{workflowEvent.response.body.$.id}}/publish
 
 ###
-// Hold seat B-1-1 for this workflow (kept distinct from the standalone
-// Seats section above, which uses A-1-1)
-POST {{HostAddress}}/api/seats/01b8dac5-c788-7005-a000-000000000005/hold
-
-###
+// Creating the reservation holds seat B-1-1 itself - CreateReservation
+// acquires the hold internally now, there's no separate hold step
 # @name workflowReservation
 POST {{HostAddress}}/api/reservations
 Content-Type: application/json
@@ -219,14 +197,12 @@ Accept: application/json
 // ============================================================
 // Reservation status transitions (standalone, decoupled from the
 // order workflow above - uses seat A-1-2 to avoid interfering with
-// either the Seats section or the full workflow section)
+// the full workflow section)
 // ============================================================
 
 ###
-POST {{HostAddress}}/api/seats/01b8dac5-bfb8-7003-a000-000000000003/hold
-
-###
 # @name standaloneReservation
+// Creating the reservation holds seat A-1-2 itself
 POST {{HostAddress}}/api/reservations
 Content-Type: application/json
 

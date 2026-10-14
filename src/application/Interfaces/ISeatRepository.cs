@@ -2,12 +2,9 @@ using EventReservation.Domain.Models;
 
 namespace EventReservation.Application.Interfaces;
 
-public interface ISeatRepository
+public interface ISeatRepository : IRepository
 {
     Task<Result<Seat>> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
-    Task<Result<IReadOnlyList<Seat>>> GetByVenueIdAsync(Guid venueId, CancellationToken cancellationtoken = default);
+    Task<Result<IReadOnlyList<Seat>>> GetByVenueIdAsync(Guid venueId, CancellationToken cancellationToken = default);
     Task<Result<Seat>> AddAsync(Seat seat, CancellationToken cancellationToken = default);
-    Task<Result<bool>> TryHoldAsync(Guid seatId, CancellationToken cancellationToken = default);
-    Task<Result<bool>> TryReserveAsync(Guid seatId, CancellationToken cancellationToken = default);
-    Task<Result<bool>> TryReleaseAsync(Guid seatId, CancellationToken cancellationToken = default);
 }

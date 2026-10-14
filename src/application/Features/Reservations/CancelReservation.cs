@@ -1,5 +1,6 @@
 using EventReservation.Application.Abstractions.Requests;
 using EventReservation.Application.Interfaces;
+using EventReservation.Domain.Models;
 
 namespace EventReservation.Application.Features.Reservations;
 
@@ -8,7 +9,7 @@ public sealed record CancelReservationCommand(Guid Id) : ICommand<CancelReservat
 
 public sealed class CancelReservationCommandHandler(
     IReservationRepository reservationRepository,
-    ISeatRepository seatRepository)
+    IEventSeatRepository eventSeatRepository)
     : ICommandHandler<CancelReservationCommand, CancelReservationResult>
 {
     public Task<Result<CancelReservationResult>> HandleAsync(
@@ -16,12 +17,24 @@ public sealed class CancelReservationCommandHandler(
         CancellationToken cancellationToken = default)
     {
         var result = reservationRepository.GetByIdAsync(command.Id, cancellationToken)
-            .Bind(reservation => reservation.Cancel())
-            .Bind(reservation => reservationRepository.TryCancelAsync(reservation.Id, cancellationToken)
-                .Ensure(cancelled => cancelled, Errors.ReservationNotHeldOrConfirmed)
-                .Bind(_ => seatRepository.TryReleaseAsync(reservation.SeatId, cancellationToken))
-                .Ensure(released => released, Errors.SeatCouldNotBeReleased)
-                .Map(_ => new CancelReservationResult(reservation.Id)));
+            .Bind(reservation => reservation.Status is ReservationStatus.Cancelled or ReservationStatus.Expired
+                ? Task.FromResult(Success(new CancelReservationResult(reservation.Id)))
+                : CancelAndReleaseAsync(reservation, cancellationToken));
+
+        return result;
+    }
+
+    private Task<Result<CancelReservationResult>> CancelAndReleaseAsync(Reservation reservation, CancellationToken cancellationToken)
+    {
+        var result = reservation.Cancel()
+            .Bind(cancelled => reservationRepository.TryCancelAsync(cancelled.Id, cancellationToken)
+                .Ensure(cancelledInDb => cancelledInDb, Errors.ReservationNotHeldOrConfirmed)
+                .Bind(_ => eventSeatRepository.TryReleaseAsync(
+                    cancelled.SeatId,
+                    cancelled.EventId,
+                    cancelled.Id,
+                    cancellationToken))
+                .Map(_ => new CancelReservationResult(cancelled.Id)));
 
         return result;
     }
@@ -32,8 +45,5 @@ public sealed class CancelReservationCommandHandler(
 
         public static ResultError ReservationNotHeldOrConfirmed =>
             new(Context, "The requested reservation is not currently held or confirmed and cannot be cancelled.", ErrorCategory.Conflict);
-
-        public static ResultError SeatCouldNotBeReleased =>
-            new(Context, "The reservation was cancelled, but the associated seat could not be released.", ErrorCategory.Conflict);
     }
 }

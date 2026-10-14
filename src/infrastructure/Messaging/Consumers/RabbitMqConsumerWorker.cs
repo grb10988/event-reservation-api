@@ -33,7 +33,10 @@ public sealed class RabbitMqConsumerWorker<TEvent>(
             .Bind(channel => RegisterConsumerAsync(channel, cancellationToken))
             .Bind(() => AwaitCancellationAsync(cancellationToken))
             .TapError(errors =>
-                _logger.LogError("Consumer worker failed to execute: {Errors}", errors.ToFailureMessages()));
+                _logger.LogError(
+                    "Consumer worker failed to execute. Contexts: {ErrorContexts}. Errors: {Errors}",
+                    errors.ToContexts(),
+                    errors.ToDiagnosticMessages()));
     }
 
     private async Task<Result<IChannel>> CreateChannelAsync(CancellationToken cancellationToken)
@@ -206,9 +209,9 @@ public sealed class RabbitMqConsumerWorker<TEvent>(
             .Tap(() => activity?.SetStatus(ActivityStatusCode.Ok))
             .TapError(errors =>
             {
-                var failureMessage = errors.ToFailureMessages();
-                activity?.SetStatus(ActivityStatusCode.Error, failureMessage);
+                activity?.SetStatus(ActivityStatusCode.Error, errors.ToDiagnosticMessages());
                 activity?.SetTag("error.type", "messaging_consume_failure");
+                activity?.SetTag("error.contexts", errors.ToContexts());
             });
 
         return result;

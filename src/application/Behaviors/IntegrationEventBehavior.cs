@@ -83,11 +83,9 @@ public sealed class IntegrationEventMetricsBehavior(IEventPublisher inner) : IEv
         try
         {
             var result = await inner.PublishAsync(@event, cancellationToken);
-            outcome = result.IsSuccess ? "success" : "failue";
+            outcome = result.IsSuccess ? "success" : "failure";
 
-            Instruments.Total.Add(1,
-                new KeyValuePair<string, object?>("event", name),
-                new KeyValuePair<string, object?>("outcome", outcome));
+            Instruments.Total.Add(1, PipelineMetrics.BuildOutcomeTags("event", name, outcome, result));
 
             return result;
         }
@@ -95,9 +93,7 @@ public sealed class IntegrationEventMetricsBehavior(IEventPublisher inner) : IEv
         {
             outcome = "exception";
 
-            Instruments.Exceptions.Add(1,
-                new KeyValuePair<string, object?>("event", name),
-                new KeyValuePair<string, object?>("exception_type", ex.GetType().Name));
+            Instruments.Exceptions.Add(1, PipelineMetrics.BuildExceptionTags("event", name, ex));
 
             throw;
         }
@@ -105,8 +101,7 @@ public sealed class IntegrationEventMetricsBehavior(IEventPublisher inner) : IEv
         {
             Instruments.Duration.Record(
                 stopwatch.Elapsed.TotalMilliseconds,
-                new KeyValuePair<string, object?>("event", name),
-                new KeyValuePair<string, object?>("outcome", outcome));
+                PipelineMetrics.BuildDurationTags("event", name, outcome));
         }
     }
 }

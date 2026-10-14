@@ -176,6 +176,47 @@ public sealed class OrderRepository(
                 .ToList();
         });
 
+    public Task<Result<Order>> GetByReservationIdAsync(
+        Guid reservationId,
+        CancellationToken cancellationToken = default) =>
+        RepositoryOperations.ExecuteAsync(connectionFactory, logger, async connection =>
+        {
+            var rows = (await connection.QueryAsync<OrderRow>(
+                new CommandDefinition(
+                    @"
+                    SELECT
+                        o.id AS Id,
+                        o.customer_id AS CustomerId,
+                        o.status AS Status,
+                        o.confirmation_number AS ConfirmationNumber,
+                        o.created_at AS CreatedAt
+                    FROM
+                        orders AS o
+                    JOIN
+                        order_reservations AS orr ON orr.order_id = o.id
+                    WHERE
+                        orr.reservation_id = @ReservationId
+                    ",
+                    new { ReservationId = reservationId },
+                    cancellationToken: cancellationToken))).ToList();
+
+            if (rows.Count == 0)
+                return (Rows: rows, ReservationIds: new List<Guid>());
+
+            var reservationIds = await LoadReservationIdsAsync(connection, rows[0].Id, cancellationToken);
+
+            return (Rows: rows, ReservationIds: reservationIds);
+        })
+        .Bind(result => result.Rows.Count == 0
+            ? Failure<Order>(RepositoryErrors.NotFound)
+            : Success(Order.Rehydrate(
+                result.Rows[0].Id,
+                result.Rows[0].CustomerId,
+                result.ReservationIds,
+                result.Rows[0].Status,
+                result.Rows[0].ConfirmationNumber,
+                result.Rows[0].CreatedAt)));
+
     public Task<Result<Order>> AddAsync(Order order, CancellationToken cancellationToken = default) =>
         RepositoryOperations.ExecuteAsync(connectionFactory, logger, async connection =>
         {
@@ -213,7 +254,11 @@ public sealed class OrderRepository(
                     transaction: transaction,
                     cancellationToken: cancellationToken));
 
-            await connection.ExecuteAsync(
+            var reservationIds = order.ReservationIds.ToArray();
+
+            // Re-verifies every reservation is still Held and unexpired at the
+            // instant of the real insert, inside this same transaction
+            var linkedCount = await connection.ExecuteAsync(
                 new CommandDefinition(
                     @"
                     INSERT INTO order_reservations
@@ -223,42 +268,68 @@ public sealed class OrderRepository(
                     )
                     SELECT
                         @OrderId,
-                        unnest(@ReservationIds::uuid[])
+                        r.id
+                    FROM
+                        reservations AS r
+                    WHERE
+                        r.id = ANY(@ReservationIds::uuid[]) AND
+                        r.status = @RequiredStatus AND
+                        r.hold_expires_at > now()
                     ",
                     new
                     {
                         OrderId = order.Id,
-                        ReservationIds = order.ReservationIds.ToArray()
+                        ReservationIds = reservationIds,
+                        RequiredStatus = ReservationStatus.Held.ToString()
                     },
                     transaction: transaction,
                     cancellationToken: cancellationToken));
 
-            transaction.Commit();
+            if (linkedCount == reservationIds.Length)
+            {
+                transaction.Commit();
+                return linkedCount;
+            }
 
-            return order;
-        });
+            transaction.Rollback();
+            return 0;
+        })
+        .Ensure(linkedCount => linkedCount == order.ReservationIds.Count, RepositoryErrors.ReservationNoLongerAvailable)
+        .Map(_ => order);
 
-    public Task<Result<bool>> TryCompleteAsync(Guid orderId, string confirmationNumber, CancellationToken cancellationToken = default) =>
+    public Task<Result<bool>> TryCompleteAsync(
+        Guid orderId,
+        string confirmationNumber,
+        CancellationToken cancellationToken = default) =>
         RepositoryOperations.ExecuteAsync(connectionFactory, logger, async connection =>
         {
             var rowsAffected = await connection.ExecuteAsync(
                 new CommandDefinition(
                     @"
                     UPDATE
-                        orders
+                        orders AS o
                     SET
                         status = @NewStatus,
                         confirmation_number = @ConfirmationNumber
                     WHERE
-                        id = @Id AND
-                        status = @RequiredStatus
+                        o.id = @Id AND
+                        o.status = @RequiredStatus AND
+                        NOT EXISTS (
+                            SELECT 1
+                            FROM order_reservations AS orr
+                            JOIN reservations AS r ON r.id = orr.reservation_id
+                            WHERE
+                                orr.order_id = o.id AND
+                                r.status <> @ConfirmedStatus
+                        )
                     ",
                     new
                     {
                         Id = orderId,
                         NewStatus = OrderStatus.Completed.ToString(),
                         ConfirmationNumber = confirmationNumber,
-                        RequiredStatus = OrderStatus.Pending.ToString()
+                        RequiredStatus = OrderStatus.Pending.ToString(),
+                        ConfirmedStatus = ReservationStatus.Confirmed.ToString()
                     },
                     cancellationToken: cancellationToken));
 

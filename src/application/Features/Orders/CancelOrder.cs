@@ -11,39 +11,51 @@ public sealed record CancelOrderCommand(Guid Id) : ICommand<CancelOrderResult>;
 
 public sealed class CancelOrderCommandHandler(
     IOrderRepository orderRepository,
+    IReservationRepository reservationRepository,
     IDispatcher dispatcher)
     : ICommandHandler<CancelOrderCommand, CancelOrderResult>
 {
-    public async Task<Result<CancelOrderResult>> HandleAsync(
+    public Task<Result<CancelOrderResult>> HandleAsync(
         CancelOrderCommand command,
         CancellationToken cancellationToken = default)
     {
-        var result = await orderRepository.GetByIdAsync(command.Id, cancellationToken)
+        var result = orderRepository.GetByIdAsync(command.Id, cancellationToken)
             .Bind(order => order.Cancel())
-            .Bind(order => CancelReservationsAsync(order, cancellationToken))
             .Bind(order => orderRepository.TryCancelAsync(order.Id, cancellationToken)
-                .Ensure(cancelled => cancelled, Errors.OrderUpdateFailed)
-                .Map(_ => new CancelOrderResult(order.Id)));
+                .Ensure(claimed => claimed, Errors.OrderNoLongerPending)
+                .Bind(_ => CancelActiveReservationsAsync(order, cancellationToken)))
+            .Map(order => new CancelOrderResult(order.Id));
 
         return result;
     }
 
-    private async Task<Result<Order>> CancelReservationsAsync(Order order, CancellationToken cancellationToken)
+    private Task<Result<Order>> CancelActiveReservationsAsync(Order order, CancellationToken cancellationToken)
     {
-        var cancellations = await Task.WhenAll(order.ReservationIds.Select(id =>
-            dispatcher.SendAsync(new CancelReservationCommand(id), cancellationToken)));
+        var result = Combine(order.ReservationIds
+                .Select(id => reservationRepository.GetByIdAsync(id, cancellationToken))
+                .ToArray())
+            .Map(reservations => reservations.Where(r => r.Status is ReservationStatus.Held or ReservationStatus.Confirmed).ToList())
+            .Bind(active => DispatchCancellationsAsync(active, cancellationToken))
+            .Bind(() => Success(order));
 
-        var cancelled = Combine(cancellations);
+        return result;
+    }
 
-        return cancelled.IsSuccess
-            ? Success(order)
-            : Failure<Order>(cancelled.Errors);
+    private async Task<Result> DispatchCancellationsAsync(IReadOnlyList<Reservation> active, CancellationToken cancellationToken)
+    {
+        var cancellations = await Task.WhenAll(active.Select(r =>
+            dispatcher.SendAsync(new CancelReservationCommand(r.Id), cancellationToken).Bind(_ => Success())));
+
+        var result = Combine(cancellations);
+
+        return result;
     }
 
     public static class Errors
     {
         private const string Context = "CANCEL_ORDER";
-        public static ResultError OrderUpdateFailed =>
-            new(Context, "The order's reservations were cancelled, but the order itself could not be marked Cancelled.", ErrorCategory.Unexpected);
+
+        public static ResultError OrderNoLongerPending =>
+            new(Context, "The order is no longer pending and cannot be cancelled.", ErrorCategory.Conflict);
     }
 }

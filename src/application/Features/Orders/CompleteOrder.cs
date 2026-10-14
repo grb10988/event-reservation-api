@@ -11,42 +11,72 @@ public sealed record CompleteOrderCommand(Guid Id) : ICommand<CompleteOrderResul
 
 public sealed class CompleteOrderCommandHandler(
     IOrderRepository orderRepository,
+    IReservationRepository reservationRepository,
     IDispatcher dispatcher)
     : ICommandHandler<CompleteOrderCommand, CompleteOrderResult>
 {
-    public async Task<Result<CompleteOrderResult>> HandleAsync(
+    public Task<Result<CompleteOrderResult>> HandleAsync(
         CompleteOrderCommand command,
         CancellationToken cancellationToken = default)
     {
-        var result = await orderRepository.GetByIdAsync(command.Id, cancellationToken)
+        var result = orderRepository.GetByIdAsync(command.Id, cancellationToken)
             .Bind(order => order.Complete())
-            .Bind(order => ConfirmReservationsAsync(order, cancellationToken))
-            .Bind(order => order.ConfirmationNumber is string confirmationNumber
-                ? Success((Order: order, ConfirmationNumber: confirmationNumber))
-                : Failure<(Order Order, string ConfirmationNumber)>(Errors.OrderUpdateFailed))
-            .Bind(t => orderRepository.TryCompleteAsync(t.Order.Id, t.ConfirmationNumber, cancellationToken)
-                .Ensure(completed => completed, Errors.OrderUpdateFailed)
-                .Map(_ => new CompleteOrderResult(t.Order.Id, t.ConfirmationNumber)));
+            .Bind(order => CompleteAndPersistAsync(order, cancellationToken));
 
         return result;
     }
 
-    private async Task<Result<Order>> ConfirmReservationsAsync(Order order, CancellationToken cancellationToken)
+    private Task<Result<CompleteOrderResult>> CompleteAndPersistAsync(Order order, CancellationToken cancellationToken)
     {
-        var confirmations = await Task.WhenAll(order.ReservationIds.Select(id =>
-            dispatcher.SendAsync(new ConfirmReservationCommand(id), cancellationToken)));
+        var result = ConfirmRemainingReservationsAsync(order, cancellationToken)
+            .Bind(() => order.ConfirmationNumber is string confirmationNumber
+                ? Success(confirmationNumber)
+                : Failure<string>(Errors.OrderUpdateFailed))
+            .Bind(confirmationNumber => orderRepository.TryCompleteAsync(order.Id, confirmationNumber, cancellationToken)
+                .Ensure(completed => completed, Errors.OrderNoLongerCompletable)
+                .Map(_ => new CompleteOrderResult(order.Id, confirmationNumber)));
 
-        var confirmed = Combine(confirmations);
+        return result;
+    }
 
-        return confirmed.IsSuccess
-            ? Success(order)
-            : Failure<Order>(confirmed.Errors);
+    private Task<Result> ConfirmRemainingReservationsAsync(Order order, CancellationToken cancellationToken)
+    {
+        var result = Combine(order.ReservationIds
+                .Select(id => reservationRepository.GetByIdAsync(id, cancellationToken))
+                .ToArray())
+            .Ensure(reservations =>
+                reservations.All(r =>
+                    r.Status is ReservationStatus.Held or ReservationStatus.Confirmed), Errors.ReservationNoLongerActive)
+            .Map(reservations => reservations.Where(r => r.Status == ReservationStatus.Held).ToList())
+            .Bind(toConfirm => DispatchConfirmationsAsync(toConfirm, cancellationToken));
+
+        return result;
+    }
+
+    private async Task<Result> DispatchConfirmationsAsync(
+        IReadOnlyList<Reservation> toConfirm,
+        CancellationToken cancellationToken)
+    {
+        var confirmations = await Task.WhenAll(toConfirm.Select(r =>
+            dispatcher.SendAsync(new ConfirmReservationCommand(r.Id), cancellationToken)
+                .Bind(_ => Success())));
+
+        var result = Combine(confirmations);
+
+        return result;
     }
 
     public static class Errors
     {
         private const string Context = "COMPLETE_ORDER";
+
+        public static ResultError ReservationNoLongerActive =>
+            new(Context, "One or more reservations on this order are no longer held or confirmed.", ErrorCategory.Conflict);
+
         public static ResultError OrderUpdateFailed =>
-            new(Context, "The order's reservations were confirmed, but the order itself could not be marked Completed.", ErrorCategory.Unexpected);
+            new(Context, "The order's reservations were confirmed, but the confirmation number could not be generated.", ErrorCategory.Unexpected);
+
+        public static ResultError OrderNoLongerCompletable =>
+            new(Context, "The order is no longer pending, or one of its reservations is no longer confirmed.", ErrorCategory.Conflict);
     }
 }

@@ -10,11 +10,12 @@ namespace EventReservation.Tests.Infrastructure.Integration.Persistence.Reposito
 [TestClass]
 public class ReservationRepositoryTests : IntegrationTestBase
 {
-    private static readonly DateTimeOffset Now = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+    private static readonly DateTimeOffset Now = TruncateToSeconds(DateTimeOffset.UtcNow);
 
     private IVenueRepository _venueRepository = null!;
     private ISeatRepository _seatRepository = null!;
     private IEventRepository _eventRepository = null!;
+    private IEventSeatRepository _eventSeatRepository = null!;
     private ICustomerRepository _customerRepository = null!;
     private IReservationRepository _reservationRepository = null!;
     private FakeTimeProvider _timeProvider = null!;
@@ -25,6 +26,7 @@ public class ReservationRepositoryTests : IntegrationTestBase
         _venueRepository = new VenueRepository(ConnectionFactory, NullLogger<VenueRepository>.Instance);
         _seatRepository = new SeatRepository(ConnectionFactory, NullLogger<SeatRepository>.Instance);
         _eventRepository = new EventRepository(ConnectionFactory, NullLogger<EventRepository>.Instance);
+        _eventSeatRepository = new EventSeatRepository(ConnectionFactory, NullLogger<EventSeatRepository>.Instance);
         _customerRepository = new CustomerRepository(ConnectionFactory, NullLogger<CustomerRepository>.Instance);
         _reservationRepository = new ReservationRepository(ConnectionFactory, NullLogger<ReservationRepository>.Instance);
         _timeProvider = new FakeTimeProvider(Now);
@@ -68,6 +70,11 @@ public class ReservationRepositoryTests : IntegrationTestBase
 
     private async Task<Reservation> SeedHeldReservationAsync(Guid seatId, Guid eventId, Guid customerId, decimal price = 50.00m, TimeSpan? holdDuration = null)
     {
+        var seatLookup = await _seatRepository.GetByIdAsync(seatId);
+        Assert.IsTrue(seatLookup.IsSuccess, string.Join("; ", seatLookup.ToFailureMessages()));
+        var provisionResult = await _eventSeatRepository.ProvisionAsync(eventId, seatLookup.Value.VenueId);
+        Assert.IsTrue(provisionResult.IsSuccess, string.Join("; ", provisionResult.ToFailureMessages()));
+
         var reservation = Reservation.Create(seatId, eventId, customerId, price, _timeProvider, holdDuration).Value;
         Assert.IsNotNull(reservation);
         var result = await _reservationRepository.AddAsync(reservation);
@@ -87,6 +94,8 @@ public class ReservationRepositoryTests : IntegrationTestBase
         var seatId = await SeedSeatAsync(venueId);
         var eventId = await SeedEventAsync(venueId);
         var customerId = await SeedCustomerAsync();
+        var provisionResult = await _eventSeatRepository.ProvisionAsync(eventId, venueId);
+        Assert.IsTrue(provisionResult.IsSuccess, string.Join("; ", provisionResult.ToFailureMessages()));
         var reservation = Reservation.Create(seatId, eventId, customerId, 65.00m, _timeProvider).Value;
         Assert.IsNotNull(reservation);
 
